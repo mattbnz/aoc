@@ -1,6 +1,6 @@
 // Copyright (C) 2020 Matt Brown
 
-// Advent of Code 2020 - Day 1
+// Advent of Code 2020 - Day 1, Puzzle 1
 // Find two numbers in a list that sum to 2020 and return their product.
 
 package main
