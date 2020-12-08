@@ -10,35 +10,9 @@ import (
     "fmt"
     "log"
     "os"
-    "regexp"
     "strconv"
     "strings"
 )
-
-type BagMap map[string][]ContainedBag
-type ContainedBag struct {
-    color string
-    num int
-}
-var BagRe = regexp.MustCompile(`(\d)+\s(.*)`)
-var StripRe = regexp.MustCompile(` +bags?.?$`)
-
-func StripName(input string) string {
-    return StripRe.ReplaceAllString(input, "")
-}
-
-func FindBagsFor(want string, rules BagMap) []string {
-    rv := []string{}
-    for bag, contains := range rules {
-        for _, inner := range contains {
-            if inner.color == want {
-                rv = append(rv, bag)
-                break
-            }
-        }
-    }
-    return rv
-}
 
 func main() {
     // Read in the instructions
