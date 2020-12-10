@@ -11,6 +11,7 @@ import (
     "log"
     "math"
     "os"
+    "sort"
     "strconv"
 )
 
@@ -61,5 +62,32 @@ func main() {
         }
         adaptors = append(adaptors, n)
     }
-    fmt.Println(Next(adaptors, []int{}, 0))
+    // Work backwards from the largest adaptor, and calculate how many paths
+    // forward from each one there are.
+    paths := make([]int, len(adaptors))
+    paths[len(adaptors)-1] = 1  // Only one path from the biggest. 
+    sort.Ints(adaptors)
+    fmt.Printf("%v\n", adaptors)
+    for i := len(adaptors) -2; i>=0; i-- {
+        sum := 0
+        for diff := 1; diff <= 3; diff++ {
+            try := i+diff
+            if try < len(adaptors) {
+                if adaptors[try] - adaptors[i] <= 3 {
+                    sum += paths[try]
+                }
+            }
+        }
+        paths[i] = sum
+    }
+    fmt.Printf("%v\n", paths)
+
+    // Then work out which of the first 3 positions are valid, and sum them.
+    sum := 0
+    for i := 0; i<3; i++ {
+        if adaptors[i] <= 3 {
+            sum += paths[i]
+        }
+    }
+    fmt.Println(sum)
 }
