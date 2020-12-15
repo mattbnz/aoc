@@ -1,7 +1,7 @@
 // Copyright (C) 2020 Matt Brown
 
-// Advent of Code 2020 - Day 14, Puzzle 1
-// Docking bitmasks.
+// Advent of Code 2020 - Day 14, Puzzle 2
+// Docking bitmasks with floating values.
 
 package main
 
@@ -15,18 +15,29 @@ import (
 )
 var MemRe = regexp.MustCompile(`^mem\[(.*)\] = (\d+)`)
 
-func ApplyMask(mask string, v int) int {
-    rv := 0
-    for i := len(mask)-1; i>= 0; i-- {
+func GenerateAddresses(a int, mask string, mpos int, addr int) []int {
+    //fmt.Printf("%d:\n%036b\n%s\n%036b\n", mpos, a, mask, addr)
+    if mpos == -1 {
+        return []int{addr}
+    }
+    rv := []int{}
+    for i := mpos; i>= 0; i-- {
         var bpos uint
         bpos = uint(len(mask)-1-i)
         bit := 1 << bpos
         if mask[i] == 'X' {
-            rv |= (v & bit)
+            addr |= bit
+            rv = append(rv, GenerateAddresses(a, mask, i-1, addr)...)
+            addr ^= bit
+            rv = append(rv, GenerateAddresses(a, mask, i-1, addr)...)
+            return rv
         } else if mask[i] == '1' {
-            rv |= bit
+            addr |= bit
+        } else if mask[i] == '0' {
+            addr |= (a & bit)
         }
     }
+    rv = append(rv, addr)
     return rv
 }
 
@@ -48,8 +59,11 @@ func main() {
         if err != nil {
             log.Fatal("Bad instruction ", s.Text())
         }
+        for _, addr := range GenerateAddresses(r, mask, len(mask)-1, 0) {
+            //fmt.Printf("%036b: %d\n", addr, v)
+            mem[addr] = v
+        }
         //fmt.Printf("%036b\n%s\n", v, mask)
-        mem[r] = ApplyMask(mask, v)
         //fmt.Printf("%036b\n\n", mem[r])
     }
     sum := 0
