@@ -9,7 +9,6 @@ import (
     "bufio"
     "fmt"
     "log"
-    "math/big"
     "os"
     "strconv"
     "strings"
@@ -48,43 +47,19 @@ func main() {
             minutes = append(minutes, b)
         }
     }
-    // Chinese Remainder Theorum
-    // per http://homepages.math.uic.edu/~leon/mcs425-s08/handouts/chinese_remainder.pdf
-    m := 1
-    z := make([]int, len(minutes))
-    for o, bus := range minutes {
+    // stolen from https://github.com/lizthegrey/adventofcode/blob/main/2020/day13.go
+    minValue := 0
+	runningProduct := 1
+    for min, bus := range minutes {
         if bus == -1 {
             continue
         }
-        m *= bus
-        z[o] = ProductExcludeBus(minutes, bus)
-        fmt.Printf("z%d=%d\n", o, z[o])
-    }
-    fmt.Printf("m=%d\n", m)
-    y := make([]int, len(minutes))
-    for o, bus := range minutes {
-        if bus == -1 {
-            continue
-        }
-        b := big.NewInt(int64(z[o]))
-        y[o] = int(b.ModInverse(b, big.NewInt(int64(bus))).Int64())
-        fmt.Printf("y%d=%d\n", o, y[o])
-    }
-    w := make([]int, len(minutes))
-    for o, bus := range minutes {
-        if bus == -1 {
-            continue
-        }
-        w[o] = y[o]*z[o] % m
-        fmt.Printf("w%d=%d\n", o, w[o])
-    }
-    result := 0
-    for o, bus := range minutes {
-        if bus == -1 {
-            continue
-        }
-        result += o * w[o]
-    }
-    fmt.Println(result)
-    fmt.Println(result % m)
+		for (minValue+min)%bus != 0 {
+			minValue += runningProduct
+		}
+		runningProduct *= bus
+		fmt.Printf("%d + %d === 0 mod %d\n", minValue, min, bus)
+		fmt.Printf("Sum so far: %d, product so far: %d\n", minValue, runningProduct)
+	}
+	fmt.Println(minValue)
 }
