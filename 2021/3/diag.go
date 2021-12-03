@@ -12,14 +12,6 @@ import (
     "os"
 )
 
-func sum(in []int) int {
-    r := 0
-    for _, v := range in {
-        r += v
-    }
-    return r
-}
-
 func main() {
     var ones []int
     lines := 0
