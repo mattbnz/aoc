@@ -1,6 +1,6 @@
 // Copyright (C) 2022 Matt Brown
 
-// Advent of Code 2022 - Day 3, Puzzle 1.
+// Advent of Code 2022 - Day 3, Puzzle 2.
 // Rucksack mix-up.
 
 package main
@@ -22,17 +22,22 @@ func itemPriority(c rune) int {
 func main() {
 	s := bufio.NewScanner(os.Stdin)
 	sum := 0
+	member := 0
+	items := map[rune]int{}
 	for s.Scan() {
-		items := map[rune]bool{}
-		for i, c := range s.Text() {
-			if i < len(s.Text())/2 {
-				items[c] = true
-			} else {
-				if items[c] {
+		for _, c := range s.Text() {
+			items[c] |= 1 << member
+		}
+		member++
+		if member == 3 {
+			for c, count := range items {
+				if count == 7 {
 					sum += itemPriority(c)
 					break
 				}
 			}
+			items = map[rune]int{}
+			member = 0
 		}
 	}
 
