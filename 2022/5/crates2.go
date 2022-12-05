@@ -1,7 +1,7 @@
 // Copyright (C) 2022 Matt Brown
 
-// Advent of Code 2022 - Day 5, Puzzle 1.
-// Stack manipulation
+// Advent of Code 2022 - Day 5, Puzzle 2.
+// Stack manipulation with CrateMover 9001
 
 package main
 
@@ -66,35 +66,36 @@ func asInt(c string) int {
 	return v
 }
 
-func move(stacks map[int][]rune, src, dst int) {
-	item := ' '
+func move(stacks map[int][]rune, src, dst, count int) {
+	items := make([]rune, count)
 	for i := 0; i < len(stacks[src]); i++ {
 		if stacks[src][i] != ' ' {
-			item = stacks[src][i]
-			stacks[src][i] = ' '
-			fmt.Printf("Found item '%c' from %d at %d\n", item, src, i)
+			if i+count > len(stacks[src]) {
+				log.Fatalf("Can't take %d from %d starting at %d (only %d)",
+					count, src, i, len(stacks[src]))
+			}
+			copy(items, stacks[src][i:i+count])
+			for j := i; j < i+count; j++ {
+				stacks[src][j] = ' '
+			}
+			fmt.Printf("Found %d items '%v' from %d at %d\n", count, items, src, i)
 			break
 		}
 	}
-	if item == ' ' {
+	if len(items) == 0 {
 		printStacks(stacks)
 		log.Fatalf("Could not find an item to move in stack %d", src)
 	}
 
-	for i := len(stacks[dst]) - 1; i >= 0; i-- {
+	top := 0
+	for i := 0; i < len(stacks[dst]); i++ {
 		if stacks[dst][i] != ' ' {
-			fmt.Printf("Can't add to %d at %d, contains '%c'\n", dst, i, stacks[dst][i])
-			continue
+			top = i
+			break
 		}
-		stacks[dst][i] = item
-		fmt.Printf("Added '%c' to %d at %d\n", item, dst, i)
-		item = ' '
-		break
 	}
-	if item != ' ' {
-		fmt.Printf("Added '%c' to %d at top\n", item, dst)
-		stacks[dst] = append([]rune{item}, stacks[dst]...)
-	}
+	stacks[dst] = append(items, stacks[dst][top:]...)
+	fmt.Printf("Added %d items '%v' to %d from %d\n", len(items), items, dst, top)
 }
 
 func main() {
@@ -133,10 +134,8 @@ func main() {
 			continue
 		}
 		fmt.Println(s.Text())
-		for i := 0; i < asInt(m[1]); i++ {
-			move(stacks, asInt(m[2]), asInt(m[3]))
-			printStacks(stacks)
-		}
+		move(stacks, asInt(m[2]), asInt(m[3]), asInt(m[1]))
+		printStacks(stacks)
 	}
 
 	tops := ""
