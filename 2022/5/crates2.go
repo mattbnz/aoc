@@ -78,7 +78,7 @@ func move(stacks map[int][]rune, src, dst, count int) {
 			for j := i; j < i+count; j++ {
 				stacks[src][j] = ' '
 			}
-			fmt.Printf("Found %d items '%v' from %d at %d\n", count, items, src, i)
+			//fmt.Printf("Found %d items '%v' from %d at %d\n", count, items, src, i)
 			break
 		}
 	}
@@ -95,7 +95,7 @@ func move(stacks map[int][]rune, src, dst, count int) {
 		}
 	}
 	stacks[dst] = append(items, stacks[dst][top:]...)
-	fmt.Printf("Added %d items '%v' to %d from %d\n", len(items), items, dst, top)
+	//fmt.Printf("Added %d items '%v' to %d from %d\n", len(items), items, dst, top)
 }
 
 func main() {
@@ -125,17 +125,19 @@ func main() {
 			}
 		}
 	}
-	printStacks(stacks)
+	//printStacks(stacks)
 
 	moveRe := regexp.MustCompile(`move (\d+) from (\d+) to (\d+)`)
+	n := 0
 	for s.Scan() {
 		m := moveRe.FindStringSubmatch(s.Text())
 		if len(m) == 0 {
 			continue
 		}
-		fmt.Println(s.Text())
+		//fmt.Println(n, s.Text())
 		move(stacks, asInt(m[2]), asInt(m[3]), asInt(m[1]))
-		printStacks(stacks)
+		//printStacks(stacks)
+		n++
 	}
 
 	tops := ""
