@@ -1,6 +1,6 @@
 // Copyright (C) 2022 Matt Brown
 
-// Advent of Code 2022 - Day 11, Puzzle 1.
+// Advent of Code 2022 - Day 11, Puzzle 2.
 // Monkey in the Middle - Monkey Business!
 
 package main
@@ -140,6 +140,8 @@ func main() {
 		}
 	}
 
+	mod := 1
+
 	for i, m := range monkeys {
 		DPrintf("Monkey %d\n", i)
 		DPrintf("  Starting items: %s\n", PrintItems(m.Queue))
@@ -148,9 +150,11 @@ func main() {
 		DPrintf("    If true: throw to monkey %d\n", m.DestTrue)
 		DPrintf("    If false: throw to monkey %d\n", m.DestFalse)
 		DPrintln("")
+		mod *= m.Divisor
 	}
+	fmt.Printf("Common divisor is %d\n", mod)
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 		for n, m := range monkeys {
 			DPrintf("Monkey %d:\n", n)
 			for _, w := range m.Queue {
@@ -166,6 +170,8 @@ func main() {
 					w += w
 				}
 				DPrintf("    Worry level is now %d.\n", w)
+				w %= mod
+				DPrintf("    Monkey gets bored with item. Worry level is modulated to %d.\n", w)
 				next := -1
 				if w%m.Divisor == 0 {
 					DPrintf("    Current worry level is divisible by %d\n", m.Divisor)
@@ -184,7 +190,7 @@ func main() {
 		for n, m := range monkeys {
 			DPrintf("Monkey %d: %s\n", n, PrintItems(m.Queue))
 		}
-		if (i > 0 && i < 1000 && i%20 == 0) || (i > 1000 && i%1000 == 0) {
+		if (i == 20) || (i > 1000 && i%1000 == 0) {
 			fmt.Printf("== After round %d ==\n", i)
 			for n, m := range monkeys {
 				fmt.Printf("Monkey %d inspected items %d times.\n", n, m.Inspections)

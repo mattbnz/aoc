@@ -2,6 +2,10 @@
 
 // Advent of Code 2022 - Day 11, Puzzle 1.
 // Monkey in the Middle - Monkey Business!
+//
+// This was a failed/naive attempt at using
+// bigints to solve the issue - completely
+// wrong, does not work.
 
 package main
 
