@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -22,6 +23,8 @@ type Monkey struct {
 	Divisor   int
 	DestTrue  int
 	DestFalse int
+
+	Inspections int
 }
 
 func ParseQueue(l string) []int {
@@ -96,6 +99,20 @@ func PrintOp(m *Monkey) string {
 	return ""
 }
 
+var DBG = true
+
+func DPrintln(a ...any) {
+	if DBG {
+		fmt.Println(a...)
+	}
+}
+
+func DPrintf(f string, args ...any) {
+	if DBG {
+		fmt.Printf(f, args...)
+	}
+}
+
 func main() {
 	s := bufio.NewScanner(os.Stdin)
 
@@ -121,13 +138,58 @@ func main() {
 	}
 
 	for i, m := range monkeys {
-		fmt.Printf("Monkey %d\n", i)
-		fmt.Printf("  Starting items: %s\n", PrintItems(m.Queue))
-		fmt.Printf("  Operation: new = old %s\n", PrintOp(m))
-		fmt.Printf("  Test: divisible by %d\n", m.Divisor)
-		fmt.Printf("    If true: throw to monkey %d\n", m.DestTrue)
-		fmt.Printf("    If false: throw to monkey %d\n", m.DestFalse)
-		fmt.Println("")
+		DPrintf("Monkey %d\n", i)
+		DPrintf("  Starting items: %s\n", PrintItems(m.Queue))
+		DPrintf("  Operation: new = old %s\n", PrintOp(m))
+		DPrintf("  Test: divisible by %d\n", m.Divisor)
+		DPrintf("    If true: throw to monkey %d\n", m.DestTrue)
+		DPrintf("    If false: throw to monkey %d\n", m.DestFalse)
+		DPrintln("")
 	}
 
+	for i := 0; i < 20; i++ {
+		for n, m := range monkeys {
+			DPrintf("Monkey %d:\n", n)
+			for _, w := range m.Queue {
+				m.Inspections++
+				DPrintf("  Monkey inspects an item with worry level of %d.\n", w)
+				if m.MultBy > 0 {
+					w *= m.MultBy
+				} else if m.AddBy > 0 {
+					w += m.AddBy
+				} else if m.MultBy == -1 {
+					w *= w
+				} else if m.AddBy == -1 {
+					w += w
+				}
+				DPrintf("    Worry level is now %d.\n", w)
+				w /= 3
+				DPrintf("    Monkey gets bored with item. Worry level is divided by 3 to %d.\n", w)
+				next := -1
+				if w%m.Divisor == 0 {
+					DPrintf("    Current worry level is divisible by %d\n", m.Divisor)
+					next = m.DestTrue
+				} else {
+					DPrintf("    Current worry level is not divisible by %d\n", m.Divisor)
+					next = m.DestFalse
+				}
+				nextM := monkeys[next]
+				nextM.Queue = append(nextM.Queue, w)
+				DPrintf("    Item with worry level %d is thrown to monkey %d.\n", w, next)
+			}
+			m.Queue = []int{}
+		}
+
+		for n, m := range monkeys {
+			fmt.Printf("Monkey %d: %s\n", n, PrintItems(m.Queue))
+		}
+	}
+
+	counts := []int{}
+	for n, m := range monkeys {
+		fmt.Printf("Monkey %d inspected items %d times.\n", n, m.Inspections)
+		counts = append(counts, m.Inspections)
+	}
+	sort.Ints(counts)
+	fmt.Println(counts[len(counts)-2] * counts[len(counts)-1])
 }
