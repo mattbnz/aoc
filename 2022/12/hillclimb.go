@@ -53,6 +53,27 @@ type Cell struct {
 	dist int // distance to this cell
 }
 
+var Reset = "\033[0m"
+
+var Red = "\033[31m"
+var Green = "\033[32m"
+var Yellow = "\033[33m"
+var Blue = "\033[34m"
+var Purple = "\033[35m"
+var Cyan = "\033[36m"
+var Gray = "\033[37m"
+var White = "\033[97m"
+var Colors = []string{Red, Green, Yellow, Blue, Purple, Cyan, Gray}
+
+func (c Cell) String() string {
+	return fmt.Sprintf("%s(%c)", c.id, c.height+'a')
+}
+
+func (c Cell) PrintColorHeight() {
+	fmt.Printf(Colors[c.height%len(Colors)])
+	fmt.Printf("%c", c.height+'a')
+}
+
 type Grid struct {
 	cells [][]*Cell
 
@@ -84,15 +105,18 @@ func (g *Grid) Print() {
 	for r, cols := range g.cells {
 		for c, h := range cols {
 			if r == g.start.row && c == g.start.col {
+				fmt.Print(Reset)
 				fmt.Printf("S")
 			} else if r == g.end.row && c == g.end.col {
+				fmt.Print(Reset)
 				fmt.Printf("E")
 			} else {
-				fmt.Printf("%c", h.height+'a')
+				h.PrintColorHeight()
 			}
 		}
 		fmt.Println("")
 	}
+	fmt.Print(Reset)
 }
 
 // returns a cell from the grid (or nil, if pos is invalid)
@@ -113,7 +137,7 @@ func (g *Grid) CanMove(pFrom, pTo Pos) *Cell {
 		g.Debug(-1, "!CanMove (bad cell) %s->%s", pFrom, pTo)
 		return nil
 	}
-	if Abs(from.height-to.height) > 1 {
+	if to.height > from.height && to.height-from.height > 1 {
 		g.Debug(-1, "!CanMove (too high) %s->%s", pFrom, pTo)
 		return nil
 	}
@@ -153,8 +177,9 @@ func (g *Grid) Debug(dist int, msg string, args ...any) {
 	fmt.Println("")
 }
 
-func (g *Grid) Explore(from Pos, dist int) {
-	g.Debug(dist, "%d: %s", dist, from)
+func (g *Grid) Explore(from Pos, to Pos, dist int) {
+	c := g.Cell(from)
+	g.Debug(dist, "%d: %s", dist, c)
 	o := g.MoveOptions(from)
 	explore := []*Cell{}
 	// Update cells first to prevent loops
@@ -162,23 +187,23 @@ func (g *Grid) Explore(from Pos, dist int) {
 		if c.dist == 0 {
 			// New cell, not seen before
 			c.dist = dist
-			g.Debug(dist, "=> %s @ %d", c.id, dist)
+			g.Debug(dist, "=> %s @ %d", c, dist)
 			explore = append(explore, c)
 		} else if c.dist > dist {
 			// We found a better path to c, update
-			g.Debug(dist, "=> %s @ %d (was %d)", c.id, dist, c.dist)
+			g.Debug(dist, "=> %s @ %d (was %d)", c, dist, c.dist)
 			c.dist = dist
 			explore = append(explore, c) // TODO: what about previous explore...
 		} else if c.dist < dist {
 			// that option is already being explored, and is shorter, so abandon this path entirely
-			g.Debug(dist, "! %s (shorter @ %d vs %d)", c.id, c.dist, dist)
+			//g.Debug(dist, "! %s (shorter @ %d vs %d)", c, c.dist, dist)
 			//return
 		} else {
 			// don't need to do anything for the == dist case (I think?)
-			g.Debug(dist, ". %s (same @ %d vs %d)", c.id, c.dist, dist)
+			//g.Debug(dist, ". %s (same @ %d vs %d)", c, c.dist, dist)
 		}
-		if c.id.DistFrom(g.end) == 0 {
-			g.Debug(dist, "** Found the end (%s) at %d", c.id, dist)
+		if c.id.DistFrom(to) == 0 {
+			g.Debug(dist, "** Found the destination (%s) at %d", c, dist)
 			// actually this is the end, so we don't need to explore further!
 			return
 		}
@@ -186,7 +211,7 @@ func (g *Grid) Explore(from Pos, dist int) {
 
 	// Now recurse and explore
 	for _, c := range explore {
-		g.Explore(c.id, dist+1)
+		g.Explore(c.id, to, dist+1)
 	}
 
 }
@@ -201,8 +226,9 @@ func main() {
 	grid.Print()
 	fmt.Println()
 
-	grid.Explore(grid.start, 1)
-
 	end := grid.Cell(grid.end)
+	start := grid.Cell(grid.start)
+
+	grid.Explore(start.id, end.id, 1)
 	fmt.Println(end.dist)
 }
