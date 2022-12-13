@@ -1,7 +1,7 @@
 // Copyright (C) 2022 Matt Brown
 
 // Advent of Code 2022 - Day 13, Puzzle 1.
-// Distress Signal - ordering.
+// Distress Signal - sorting a list.
 
 package main
 
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -141,38 +142,33 @@ func ParseSignal(s string) (Signal, int) {
 func main() {
 	s := bufio.NewScanner(os.Stdin)
 
-	sum := 0
-	pair := 1
-
-	signals := []Signal{}
+	signals := []Signal{{Signal{2}}, {Signal{6}}}
+	key1 := signals[0].String()
+	key2 := signals[1].String()
 	for s.Scan() {
 		if s.Text() == "" {
-			if len(signals) != 2 {
-				log.Fatal("blank line but don't have 2 signals!")
-			}
-			if signals[0].Compare(signals[1]) == -1 {
-				fmt.Println("OK")
-				sum += pair
-			} else {
-				fmt.Println("NOT OK")
-			}
-			pair++
-			signals = []Signal{}
-		} else {
-			e, used := ParseSignal(s.Text())
-			if used < len(s.Text()) {
-				log.Fatalf("Parsing of %s only consumed %d/%d characters!", s.Text(), used, len(s.Text()))
-			}
-			signals = append(signals, e)
+			continue
 		}
+		e, used := ParseSignal(s.Text())
+		if used < len(s.Text()) {
+			log.Fatalf("Parsing of %s only consumed %d/%d characters!", s.Text(), used, len(s.Text()))
+		}
+		signals = append(signals, e)
 	}
-	if len(signals) == 2 {
-		if signals[0].Compare(signals[1]) == -1 {
-			fmt.Println("OK")
-			sum += pair
-		} else {
-			fmt.Println("NOT OK")
+
+	sort.SliceStable(signals, func(i, j int) bool {
+		return signals[i].Compare(signals[j]) == -1
+	})
+
+	sum := 1
+	for i, s := range signals {
+		k := s.String()
+		fmt.Printf(k)
+		if k == key1 || k == key2 {
+			sum *= (i + 1)
+			fmt.Print("  ***** ", i+1)
 		}
+		fmt.Println()
 	}
 	fmt.Println(sum)
 }
