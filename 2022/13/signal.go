@@ -51,6 +51,53 @@ func (s Signal) String() string {
 	return fmt.Sprintf("[%s]", strings.Join(v, ","))
 }
 
+func (s Signal) Compare(o Signal) int {
+	i := 0
+	for {
+		if len(s) <= i {
+			return -1 // left ran out first!
+		}
+		if len(o) <= i {
+			return 1 // right ran out first!
+		}
+		sL, slOk := s[i].(Signal)
+		oL, olOk := o[i].(Signal)
+		if slOk && olOk {
+			if v := sL.Compare(oL); v != 0 {
+				return v
+			}
+			i++
+			continue
+		}
+		sI, siOk := s[i].(int)
+		oI, oiOk := o[i].(int)
+		if siOk && oiOk {
+			if sI > oI {
+				return 1
+			} else if sI < oI {
+				return -1
+			}
+			i++
+			continue
+		}
+		if slOk && oiOk {
+			if v := sL.Compare(Signal{oI}); v != 0 {
+				return v
+			}
+		} else if siOk && olOk {
+			if v := (Signal{sI}).Compare(oL); v != 0 {
+				return v
+			}
+		} else {
+			log.Fatal("mismatch at ", i)
+		}
+		i++
+	}
+
+	// both ended, aka right ran out first?
+	return -1
+}
+
 func ParseSignal(s string) (Signal, int) {
 	if s[0] != '[' {
 		return Signal{Int(s)}, len(s)
@@ -80,7 +127,7 @@ func ParseSignal(s string) (Signal, int) {
 				log.Fatalf("Found unterminated list at %d parsing: %s", i, s)
 			}
 			n := Min(c, e)
-			rv = append(rv, Signal{Int(s[i : i+n])})
+			rv = append(rv, Int(s[i:i+n]))
 			//fmt.Printf(" used from %d to %d\n", i, i+n)
 			i += n + 1
 			if e == n {
@@ -89,13 +136,6 @@ func ParseSignal(s string) (Signal, int) {
 		}
 	}
 	return rv, i
-}
-
-func IsOrdered(a, b Signal) bool {
-	fmt.Println("A", a)
-	fmt.Println("B", b)
-	fmt.Println()
-	return false
 }
 
 func main() {
@@ -110,8 +150,11 @@ func main() {
 			if len(signals) != 2 {
 				log.Fatal("blank line but don't have 2 signals!")
 			}
-			if IsOrdered(signals[0], signals[1]) {
+			if signals[0].Compare(signals[1]) == -1 {
+				fmt.Println("OK")
 				sum += pair
+			} else {
+				fmt.Println("NOT OK")
 			}
 			pair++
 			signals = []Signal{}
@@ -124,8 +167,11 @@ func main() {
 		}
 	}
 	if len(signals) == 2 {
-		if IsOrdered(signals[0], signals[1]) {
+		if signals[0].Compare(signals[1]) == -1 {
+			fmt.Println("OK")
 			sum += pair
+		} else {
+			fmt.Println("NOT OK")
 		}
 	}
 	fmt.Println(sum)
