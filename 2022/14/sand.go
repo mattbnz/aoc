@@ -71,19 +71,34 @@ type Grid struct {
 	c              [][]int
 	minrow, maxrow int
 	mincol, maxcol int
+
+	maxdrop int
 }
 
 func (g Grid) Print() {
+	g.print(g.maxrow)
+}
+
+func (g Grid) PrintPartial() {
+	g.print(g.maxdrop + 1)
+}
+
+func (g Grid) print(maxrow int) {
 	colminS := fmt.Sprintf("% 3d", g.mincol)
 	colmaxS := fmt.Sprintf("% 3d", g.maxcol)
-	fmt.Printf("    %c%s%c\n", colminS[0], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[0])
-	fmt.Printf("    %c%s%c\n", colminS[1], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[1])
-	fmt.Printf("    %c%s%c\n", colminS[2], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[2])
-	fmt.Printf("    %c%s%c\n", colminS[3], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[3])
+	fmt.Printf("      %c%s%c\n", colminS[0], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[0])
+	fmt.Printf("      %c%s%c\n", colminS[1], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[1])
+	fmt.Printf("      %c%s%c\n", colminS[2], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[2])
+	fmt.Printf("      %c%s%c\n", colminS[3], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[3])
 	for row, cols := range g.c {
-		fmt.Printf("% 2d: ", row)
-		for _, c := range cols {
-			if c == SAND {
+		if row > maxrow {
+			return
+		}
+		fmt.Printf("% 4d: ", row)
+		for col, c := range cols {
+			if row == 0 && col == (500-g.mincol) {
+				fmt.Printf("+")
+			} else if c == SAND {
 				fmt.Printf("o")
 			} else if c == ROCK {
 				fmt.Printf("#")
@@ -95,13 +110,22 @@ func (g Grid) Print() {
 	}
 }
 
+func (g Grid) C(row, col int) int {
+	if col < g.mincol || col > g.maxcol {
+		return AIR
+	}
+	return g.c[row-g.minrow][col-g.mincol]
+}
+func (g *Grid) SetC(row, col, v int) {
+	g.c[row-g.minrow][col-g.mincol] = v
+}
+
 func (g Grid) AddLines(l [][]Pos) {
 	for _, line := range l {
 		col, row := line[0].col, line[0].row
 		e := line[1]
 		for col != e.col || row != e.row {
-			g.c[row-g.minrow][col-g.mincol] = ROCK
-
+			g.SetC(row, col, ROCK)
 			if col < e.col {
 				col++
 			} else if col > e.col {
@@ -114,8 +138,52 @@ func (g Grid) AddLines(l [][]Pos) {
 				log.Fatal("Bad line", line[0], line[1])
 			}
 		}
-		g.c[row-g.minrow][col-g.mincol] = ROCK
+		g.SetC(row, col, ROCK)
 	}
+}
+
+var DBG = false
+
+func DPrintln(a ...any) {
+	if DBG {
+		fmt.Println(a...)
+	}
+}
+
+// returns true if the sand came to rest; false if it fell to eternity
+func (g *Grid) DropSand() bool {
+	col, row := 500, 0
+	for row < g.maxrow && col >= g.mincol && col <= g.maxcol {
+		// basic case, can drop
+		if g.C(row+1, col) == AIR {
+			row++
+			DPrintln("dropping to ", col, row)
+			continue
+		}
+		// try left
+		if g.C(row+1, col-1) == AIR {
+			row++
+			col--
+			DPrintln("dropping left to ", col, row)
+			continue
+		}
+		// try right
+		if g.C(row+1, col+1) == AIR {
+			row++
+			col++
+			DPrintln("dropping right to ", col, row)
+			continue
+		}
+		// can't move
+		g.SetC(row, col, SAND)
+		g.maxdrop = Max(g.maxdrop, row)
+		DPrintln("settled at ", col, row, " maxdrop ", g.maxdrop)
+		return true
+	}
+
+	// fell out
+	DPrintln("out of bounds at ", col, row)
+	return false
 }
 
 func NewGrid(minrow, mincol, maxrow, maxcol int) Grid {
@@ -151,4 +219,13 @@ func main() {
 	grid := NewGrid(minrow, mincol, maxrow, maxcol)
 	grid.AddLines(lines)
 	grid.Print()
+
+	sand := 0
+	for grid.DropSand() {
+		sand++
+		//grid.PrintPartial()
+	}
+	fmt.Println()
+	grid.Print()
+	fmt.Println(sand)
 }
