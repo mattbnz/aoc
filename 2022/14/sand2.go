@@ -112,6 +112,9 @@ func (g Grid) print(maxrow int) {
 }
 
 func (g Grid) C(p Pos) int {
+	if p.row == g.maxrow {
+		return ROCK // infinite floor
+	}
 	return g.c[p] // default val if missing == AIR
 }
 
@@ -143,6 +146,7 @@ func (g *Grid) AddLines(l [][]Pos) {
 		}
 		g.SetC(Pos{row, col}, ROCK)
 	}
+	g.maxrow += 2
 }
 
 var DBG = false
@@ -156,7 +160,7 @@ func DPrintln(a ...any) {
 // returns true if the sand came to rest; false if it fell to eternity
 func (g *Grid) DropSand() bool {
 	col, row := 500, 0
-	for row < g.maxrow && col >= g.mincol && col <= g.maxcol {
+	for row < g.maxrow {
 		// basic case, can drop
 		if g.C(Pos{row + 1, col}) == AIR {
 			row++
@@ -181,6 +185,9 @@ func (g *Grid) DropSand() bool {
 		g.SetC(Pos{row, col}, SAND)
 		g.maxdrop = Max(g.maxdrop, row)
 		DPrintln("settled at ", col, row, " maxdrop ", g.maxdrop)
+		if col == 500 && row == 0 {
+			return false
+		}
 		return true
 	}
 
@@ -220,5 +227,5 @@ func main() {
 	}
 	fmt.Println()
 	grid.Print()
-	fmt.Println(sand)
+	fmt.Println(sand + 1)
 }
