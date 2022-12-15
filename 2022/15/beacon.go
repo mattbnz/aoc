@@ -86,10 +86,27 @@ type Grid struct {
 	mincol, maxcol int
 
 	sensors []Sensor
+
+	// these are not the math floor/ceil, they're to clamp
+	// the size of the grid
+	floor, ceil int
 }
 
 func (g Grid) Print() {
 	g.print(g.maxrow)
+}
+
+func (g Grid) Floor(i int) int {
+	if g.floor == -1 {
+		return i
+	}
+	return Max(i, g.floor)
+}
+func (g Grid) Ceil(i int) int {
+	if g.floor == -1 {
+		return i
+	}
+	return Min(i, g.ceil)
 }
 
 func (g Grid) print(maxrow int) {
@@ -100,12 +117,12 @@ func (g Grid) print(maxrow int) {
 		fmt.Printf("      %c%s%c\n", colminS[2], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[2])
 		fmt.Printf("      %c%s%c\n", colminS[3], strings.Repeat(" ", g.maxcol-g.mincol-1), colmaxS[3])
 	*/
-	for row := g.minrow; row <= g.maxrow; row++ {
+	for row := g.Floor(g.minrow); row <= g.Ceil(g.maxrow); row++ {
 		if row > maxrow {
 			return
 		}
 		fmt.Printf("% 10d: ", row)
-		for col := g.mincol; col <= g.maxcol; col++ {
+		for col := g.Floor(g.mincol); col <= g.Ceil(g.maxcol); col++ {
 			c := g.C(Pos{row, col})
 			if c == SENSOR {
 				fmt.Printf("S")
@@ -144,7 +161,7 @@ func (g *Grid) CoverRow(row int) {
 		if s.at.Dist(Pos{row: row, col: s.at.col}) > s.scope {
 			continue
 		}
-		for col := s.at.col - s.scope; col != s.at.col+s.scope+1; col++ {
+		for col := Max(g.mincol, s.at.col-s.scope); col != Min(g.maxcol, s.at.col+s.scope+1); col++ {
 			p := Pos{row: row, col: col}
 			if p == s.at || p == s.closest {
 				continue
@@ -179,6 +196,8 @@ func NewGrid() Grid {
 	g.maxrow = -1
 	g.mincol = -1
 	g.maxcol = -1
+	g.floor = -1
+	g.ceil = -1
 	g.sensors = []Sensor{}
 	return g
 }
@@ -215,16 +234,28 @@ func main() {
 		s := NewSensor(Pos{col: Int(m[1]), row: Int(m[2])}, Pos{col: Int(m[3]), row: Int(m[4])})
 		g.Add(s)
 	}
-	//g.Print()
+	g.Print()
 
 	row := Int(os.Args[1])
-	g.CoverRow(row)
-	sum := 0
-	for col := g.mincol; col != g.maxcol+1; col++ {
-		c := g.C(Pos{row: row, col: col})
-		if c == COVERED || c == SENSOR {
-			sum++
+	if row == -1 {
+		for r := g.minrow; r != g.maxrow+1; r++ {
+			g.CoverRow(r)
 		}
+		if len(os.Args) > 2 {
+			g.floor = 0
+			g.ceil = Int(os.Args[2])
+		}
+		g.Print()
+	} else {
+		g.CoverRow(row)
+
+		sum := 0
+		for col := g.mincol; col != g.maxcol+1; col++ {
+			c := g.C(Pos{row: row, col: col})
+			if c == COVERED || c == SENSOR {
+				sum++
+			}
+		}
+		fmt.Println(sum)
 	}
-	fmt.Println(sum)
 }
