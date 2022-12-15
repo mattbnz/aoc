@@ -85,15 +85,11 @@ type Grid struct {
 	minrow, maxrow int
 	mincol, maxcol int
 
-	maxdrop int
+	sensors []Sensor
 }
 
 func (g Grid) Print() {
 	g.print(g.maxrow)
-}
-
-func (g Grid) PrintPartial() {
-	g.print(g.maxdrop + 1)
 }
 
 func (g Grid) print(maxrow int) {
@@ -140,11 +136,15 @@ func (g *Grid) SetC(p Pos, v int) {
 func (g *Grid) Add(s Sensor) {
 	g.SetC(s.at, SENSOR)
 	g.SetC(s.closest, BEACON)
+	g.sensors = append(g.sensors, s)
+}
 
-	scope := s.at.Dist(s.closest)
-	DPrintf("%s and %s has scope %d\n", s.at, s.closest, scope)
-	for row := s.at.row - scope; row != s.at.row+scope+1; row++ {
-		for col := s.at.col - scope; col != s.at.col+scope+1; col++ {
+func (g *Grid) CoverRow(row int) {
+	for _, s := range g.sensors {
+		if s.at.Dist(Pos{row: row, col: s.at.col}) > s.scope {
+			continue
+		}
+		for col := s.at.col - s.scope; col != s.at.col+s.scope+1; col++ {
 			p := Pos{row: row, col: col}
 			if p == s.at || p == s.closest {
 				continue
@@ -152,7 +152,7 @@ func (g *Grid) Add(s Sensor) {
 			if g.C(p) != AIR {
 				continue
 			}
-			if s.at.Dist(p) <= scope {
+			if s.at.Dist(p) <= s.scope {
 				g.SetC(p, COVERED)
 			}
 		}
@@ -179,16 +179,23 @@ func NewGrid() Grid {
 	g.maxrow = -1
 	g.mincol = -1
 	g.maxcol = -1
+	g.sensors = []Sensor{}
 	return g
 }
 
 type Sensor struct {
 	at      Pos
 	closest Pos
+
+	scope int
 }
 
 func (s Sensor) String() string {
 	return fmt.Sprintf("Sensor at x=%d, y=%d: closest beacon is at x=%d, y=%d", s.at.col, s.at.row, s.closest.col, s.closest.row)
+}
+
+func NewSensor(at, closest Pos) Sensor {
+	return Sensor{at: at, closest: closest, scope: at.Dist(closest)}
 }
 
 // var INPUT_RE = regexp.MustCompile(`Sensor at x=([-\d+]), y=([-\d+]): closest beacon is at x=([-\d+]), y=([-\d+])`)
@@ -205,16 +212,16 @@ func main() {
 			fmt.Println(len(m), m)
 			log.Fatalf("Couldn't parse: %s", s.Text())
 		}
-		s := Sensor{}
-		s.at = Pos{col: Int(m[1]), row: Int(m[2])}
-		s.closest = Pos{col: Int(m[3]), row: Int(m[4])}
+		s := NewSensor(Pos{col: Int(m[1]), row: Int(m[2])}, Pos{col: Int(m[3]), row: Int(m[4])})
 		g.Add(s)
 	}
-	g.Print()
+	//g.Print()
 
+	row := Int(os.Args[1])
+	g.CoverRow(row)
 	sum := 0
 	for col := g.mincol; col != g.maxcol+1; col++ {
-		c := g.C(Pos{row: 10, col: col})
+		c := g.C(Pos{row: row, col: col})
 		if c == COVERED || c == SENSOR {
 			sum++
 		}
