@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -25,26 +27,109 @@ func Int(s string) int {
 	return v
 }
 
+// A priority Queue entry.
+type PQE struct {
+	node string
+	dist int
+}
+
+// Priority Queue
+type PQ struct {
+	Q []PQE
+}
+
+func (q *PQ) Add(e PQE) {
+	if len(q.Q) == 0 {
+		q.Q = append(q.Q, e)
+		return
+	}
+	if e.dist < q.Q[0].dist {
+		q.Q = append([]PQE{e}, q.Q...)
+		return
+	}
+	for n, t := range q.Q {
+		if e.dist < t.dist {
+			q.Q = append(q.Q[:n+1], q.Q[n:]...)
+			q.Q[n] = e
+			return
+		}
+	}
+	q.Q = append(q.Q, e)
+}
+
+func (q *PQ) Pop() PQE {
+	e := q.Q[0]
+	q.Q = q.Q[1:]
+	return e
+}
+
 type Valve struct {
 	name     string
 	flowRate int
 
 	paths []*Valve
+
+	// distance to other valves from this valve
+	dists map[string]int
 }
 
 func (v Valve) String() string {
+	return v.name
+}
+
+func (v Valve) Describe() string {
 	names := []string{}
 	for _, o := range v.paths {
 		names = append(names, o.name)
 	}
 	return fmt.Sprintf("Valve %s; flow rate=%d; leads to %s", v.name, v.flowRate, strings.Join(names, ", "))
 }
+
+// Calculates (Djikstra) distance to dest and stores into dists
+func (v *Valve) CalcDist(dest *Valve) {
+	if rev, ok := dest.dists[v.name]; ok {
+		v.dists[dest.name] = rev
+		return
+	}
+
+	dists := DjikstraStart()
+	been := map[string]bool{}
+	dists[v.name] = 0
+	q := PQ{}
+	q.Add(PQE{node: v.name, dist: 0})
+	for len(q.Q) > 0 {
+		c := q.Pop()
+		valve := Valves[c.node]
+		been[valve.name] = true
+		for _, n := range valve.paths {
+			if been[n.name] {
+				continue
+			}
+			if c.dist+1 < dists[n.name] {
+				dists[n.name] = c.dist + 1
+				q.Add(PQE{node: n.name, dist: c.dist + 1})
+			}
+		}
+	}
+	v.dists[dest.name] = dists[dest.name]
+}
+
+// Returns the potential pressure released if valve opens at tick,
+// given limit ticks
+func (v Valve) Potential(tick int, limit int) int {
+	return (limit - tick - 1) * v.flowRate
+}
+
 func GetOrCreateValve(name string) *Valve {
 	v := Valves[name]
 	if v != nil {
 		return v
 	}
-	v = &Valve{name: name, flowRate: -1}
+	v = &Valve{
+		name:     name,
+		flowRate: -1,
+		dists:    map[string]int{},
+	}
 	Valves[v.name] = v
 	return v
 }
@@ -93,14 +178,87 @@ func ShowDot(save bool) {
 	}
 }
 
+func DjikstraStart() map[string]int {
+	rv := map[string]int{}
+	for n := range Valves {
+		rv[n] = math.MaxInt
+	}
+	return rv
+}
+
+func IDKey(vl []*Valve) string {
+	ids := []string{}
+	for _, v := range vl {
+		ids = append(ids, v.name)
+	}
+	return strings.Join(ids, "")
+}
+
+var hit int
+var miss int
+
+type CE struct {
+	desc     string
+	pressure int
+}
+
+func Next(at *Valve, tick int, limit int, closed []*Valve) (string, int) {
+	key := fmt.Sprintf("%s-%d-%d-%s", at, tick, limit, IDKey(closed))
+	if rv, ok := Cache[key]; ok {
+		hit++
+		return rv.desc, rv.pressure
+	}
+	miss++
+	//fmt.Println(tick, "@", at, " hit=", hit, " miss=", miss)
+
+	release := 0
+	tick2 := tick
+	if at.flowRate > 0 {
+		release = at.Potential(tick, limit)
+		tick2++
+	}
+
+	best := 0
+	bestd := ""
+	for _, v := range closed {
+		when := tick2 + at.dists[v.name]
+		if when > limit-1 {
+			//fmt.Println(tick, "@", at, ": can't reach ", v, " in time.")
+			continue
+		}
+		remain := []*Valve{}
+		for _, vv := range closed {
+			if vv != v {
+				remain = append(remain, vv)
+			}
+		}
+		d, p := Next(v, when, limit, remain)
+		//fmt.Println(tick, "@", at, ": ", when, "@", v, "+=", p)
+		if p > best {
+			best = p
+			bestd = d
+		}
+	}
+	d := at.name
+	if best > 0 {
+		d += " > " + bestd
+	}
+	Cache[key] = CE{desc: d, pressure: release + best}
+	return d, release + best
+}
+
 var INPUT_RE = regexp.MustCompile(`Valve (.*?) has flow rate=(\d+); tunnel.*? lead.*? to valve.*? (.*)$`)
 
 var Valves map[string]*Valve
+var Priority []*Valve
+var Cache map[string]CE
 
 func main() {
 	s := bufio.NewScanner(os.Stdin)
 
 	Valves = map[string]*Valve{}
+	Priority = []*Valve{}
+	Cache = map[string]CE{}
 
 	for s.Scan() {
 		m := INPUT_RE.FindStringSubmatch(s.Text())
@@ -113,7 +271,31 @@ func main() {
 		}
 		v.flowRate = Int(m[2])
 		v.paths = GetOrCreateValves(m[3])
-		fmt.Println(v)
+		//fmt.Println(v.Describe())
+		if v.flowRate != 0 {
+			Priority = append(Priority, v)
+		}
 	}
-	//ShowDot(false)
+	sort.Slice(Priority, func(i, j int) bool {
+		return Priority[i].flowRate > Priority[j].flowRate
+	})
+
+	// Precompute how far from each other the valves are.
+	//fmt.Println(len(Priority), " useful valves ", Priority)
+	start := Valves["AA"]
+	for _, v := range Priority {
+		start.CalcDist(v)
+		//fmt.Println(start, " to ", v, " is ", start.dists[v.name])
+		for _, vd := range Priority {
+			if vd == v {
+				continue
+			}
+			v.CalcDist(vd)
+			//fmt.Println(v, " to ", vd, " is ", v.dists[vd.name])
+		}
+	}
+
+	path, pressure := Next(start, 0, 30, Priority)
+	fmt.Println(path)
+	fmt.Println(pressure)
 }
