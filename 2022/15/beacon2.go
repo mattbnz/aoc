@@ -135,6 +135,7 @@ func main() {
 	{
 		defer timer(time.Now(), "loop")
 		// Iterate over all rows.
+ROWS:
 		for i := onlyRow; i <= limit; i++ {
 			// Build a list of min,max coverage from each sensor over this row.
 			covers := [][]int{}
@@ -154,6 +155,7 @@ func main() {
 			for _, c := range covers[1:] {
 				if c[0] > expect {
 					missing = append(missing, []int{i, expect}) // missing a point in the middle
+					break ROWS
 				}
 				expect = Max(Min(c[1]+1, limit), expect)
 				if expect == limit {
