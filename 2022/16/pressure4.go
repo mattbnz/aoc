@@ -19,19 +19,6 @@ import (
 	"strings"
 )
 
-func Min(a, b int) int {
-	if a == -1 {
-		return b
-	}
-	if b == -1 {
-		return a
-	}
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func Int(s string) int {
 	v, err := strconv.Atoi(s)
 	if err != nil {
@@ -211,51 +198,32 @@ var hit int
 var miss int
 
 type CE struct {
-	desc     string
+	closed   []string
 	pressure int
 }
 
-func Prefix(d int) string {
-	//if d > 0 {
-	//		return strings.Repeat(" ", d)
-	//	}
-	return ""
-}
-
-type ActorState struct {
-	who  string
-	at   *Valve
-	when int
-	d    int
-}
-
-func (as ActorState) String() string {
-	if as.who != "" {
-		return fmt.Sprintf("%s:%s@%d", as.who, as.at.name, as.when)
+func Next(at *Valve, tick int, limit int, closed []*Valve) ([]string, int) {
+	key := fmt.Sprintf("%s-%d-%d-%s", at, tick, limit, IDKey(closed))
+	if rv, ok := Cache[key]; ok {
+		hit++
+		return rv.closed, rv.pressure
 	}
-	return ""
-}
-func (as ActorState) Key() string {
-	if as.at != nil && as.when != 0 {
-		return fmt.Sprintf("%s:%d", as.at.name, as.when)
+	miss++
+	//fmt.Println(tick, "@", at, " hit=", hit, " miss=", miss)
+
+	release := 0
+	tick2 := tick
+	if at.flowRate > 0 {
+		release = at.Potential(tick, limit)
+		tick2++
 	}
-	return ""
-}
 
-func (as ActorState) Prefix() string {
-	return Prefix(as.d)
-}
-
-// for when only actor is moving
-func FindBest(tick int, limit int, closed []*Valve, actor ActorState, other ActorState) (string, int) {
-	//fmt.Println(actor.Prefix(), tick, "@", actor.at, " options are: ", IDKey(closed))
 	best := 0
-	bestd := ""
-	explored := 0
+	var bestClosed []string
 	for _, v := range closed {
-		when := tick + actor.at.dists[v.name]
+		when := tick2 + at.dists[v.name]
 		if when > limit-1 {
-			//fmt.Println(actor, ": can't reach ", v, " in time.")
+			//fmt.Println(tick, "@", at, ": can't reach ", v, " in time.")
 			continue
 		}
 		remain := []*Valve{}
@@ -264,115 +232,19 @@ func FindBest(tick int, limit int, closed []*Valve, actor ActorState, other Acto
 				remain = append(remain, vv)
 			}
 		}
-		next := ActorState{who: actor.who, when: when, at: v, d: actor.d + 1}
-		d, p := Next(Min(when, other.when), limit, remain, next, other)
-		//fmt.Println(actor, ": (", v, "@", when, " + ", other, ") +=", p)
+		d, p := Next(v, when, limit, remain)
+		//fmt.Println(tick, "@", at, ": ", when, "@", v, "+=", p)
 		if p > best {
 			best = p
-			bestd = d
-		}
-		explored++
-	}
-	if explored == 0 && tick < other.when {
-		// actor couldn't do anything at this step (out of option), but other might have a valve to close still!
-		bestd, best = Next(other.when, limit, closed, other, ActorState{})
-	}
-
-	return bestd, best
-}
-
-func RemoveValve(l []*Valve, v *Valve) []*Valve {
-	newL := []*Valve{}
-	for _, vv := range l {
-		if vv != v {
-			newL = append(newL, vv)
+			bestClosed = d
 		}
 	}
-	return newL
-}
-
-func Next(tick int, limit int, closed []*Valve, a1 ActorState, a2 ActorState) (string, int) {
-	k := []string{a1.Key(), a2.Key()}
-	sort.Strings(k)
-	//key := fmt.Sprintf("%s-%s-%d-%d-%s", a1, a2, tick, limit, IDKey(closed))
-	key := fmt.Sprintf("%d-%d-%s-%s", tick, limit, IDKey(closed), strings.Join(k, ""))
-	//key := fmt.Sprintf("%d-%d-%d-%s-%s-%s", tick, a1.when, a2.when, a1.at.name, a2.at.name, IDKey(closed))
-	// TODO: is key ordering between a1, a2 important?
-	if rv, ok := Cache[key]; ok {
-		hit++
-		return rv.desc, rv.pressure
-	}
-	miss++
-	//fmt.Println(tick, ":", a1, ", ", a2, "; hit=", hit, " miss=", miss)
-	fmt.Println(key, hit, miss)
-
-	release := 0
-	dl := []string{}
-	a1_nexttick := tick
-	if a1.when == tick && a1.at.flowRate > 0 {
-		release += a1.at.Potential(tick, limit)
-		a1_nexttick++
-		//fmt.Println(a1, " opens ", a1.at.name)
-		dl = append(dl, fmt.Sprintf("%s:%s", a1.at.name, a1.who))
-		closed = RemoveValve(closed, a1.at)
-	}
-	a2_nexttick := tick
-	if a2.who != "" && a2.when == tick && a2.at.flowRate > 0 {
-		release += a2.at.Potential(tick, limit)
-		a2_nexttick++
-		//fmt.Println(a2, " opens ", a2.at.name)
-		dl = append(dl, fmt.Sprintf("%s:%s", a2.at.name, a2.who))
-		closed = RemoveValve(closed, a2.at)
-	}
-
-	best := 0
-	bestd := ""
-	if a1.when == tick && a2.when != tick {
-		bestd, best = FindBest(a1_nexttick, limit, closed, a1, a2)
-	} else if a2.who != "" && a2.when == tick && a1.when != tick {
-		bestd, best = FindBest(a2_nexttick, limit, closed, a2, a1)
-	} else if a2.who != "" && a1.when == tick && a2.when == tick {
-		for _, v := range closed {
-			when := a1_nexttick + a1.at.dists[v.name]
-			if when > limit-1 {
-				//fmt.Println(a1, ": can't reach ", v, " in time.")
-				continue
-			}
-			remain := RemoveValve(closed, v)
-			a1next := ActorState{who: a1.who, when: when, at: v, d: a1.d + 1}
-			for _, vv := range remain {
-				when2 := a2_nexttick + a2.at.dists[vv.name]
-				if when2 > limit-1 {
-					//fmt.Println(a2, ": can't reach ", v, " in time.")
-					continue
-				}
-				remain2 := RemoveValve(remain, vv)
-				a2next := ActorState{who: a2.who, when: when2, at: vv, d: a2.d + 1}
-				d, p := Next(Min(when, when2), limit, remain2, a1next, a2next)
-				//fmt.Println(a1, ": (", a1next, " THEN ", a2next, ") +=", p)
-				if a1.d == 0 {
-					fmt.Println("R: ", d, p)
-				}
-				if p > best {
-					best = p
-					bestd = d
-				}
-			}
-		}
-	}
-
-	d := ""
-	if len(dl) > 0 {
-		d += fmt.Sprintf("%d:(%s)", tick+1, strings.Join(dl, ", "))
-	}
-	if len(dl) > 0 && best > 0 {
-		d += " > "
-	}
+	newClosed := []string{at.name}
 	if best > 0 {
-		d += bestd
+		newClosed = append(newClosed, bestClosed...)
 	}
-	Cache[key] = CE{desc: d, pressure: release + best}
-	return d, release + best
+	Cache[key] = CE{closed: newClosed, pressure: release + best}
+	return newClosed, release + best
 }
 
 var INPUT_RE = regexp.MustCompile(`Valve (.*?) has flow rate=(\d+); tunnel.*? lead.*? to valve.*? (.*)$`)
@@ -413,21 +285,30 @@ func main() {
 	start := Valves["AA"]
 	for _, v := range Priority {
 		start.CalcDist(v)
-		fmt.Println(start, " to ", v, " is ", start.dists[v.name])
+		//fmt.Println(start, " to ", v, " is ", start.dists[v.name])
 		for _, vd := range Priority {
 			if vd == v {
 				continue
 			}
 			v.CalcDist(vd)
-			fmt.Println(v, " to ", vd, " is ", v.dists[vd.name])
+			//fmt.Println(v, " to ", vd, " is ", v.dists[vd.name])
 		}
 	}
 
-	path, pressure := Next(0, 26, Priority, ActorState{who: " me", when: 0, at: start}, ActorState{who: "ele", when: 0, at: start})
-
-	//a1 := ActorState{who: " me", when: 2, at: Valves["JS"]}
-	//a2 := ActorState{who: "ele", when: 3, at: Valves["EM"]}
-	//path, pressure := Next(Min(a1.when, a2.when), 26, Priority, a1, a2)
-	fmt.Println(path)
-	fmt.Println(pressure)
+	mypath, mypressure := Next(start, 0, 26, Priority)
+	closed := []*Valve{}
+NEXT:
+	for _, v := range Priority {
+		for _, c := range mypath {
+			if v.name == c {
+				continue NEXT
+			}
+		}
+		closed = append(closed, v)
+	}
+	fmt.Println(closed)
+	elepath, elepressure := Next(start, 0, 26, closed)
+	fmt.Println(" Me: ", strings.Join(mypath, " > "), mypressure)
+	fmt.Println("Ele: ", strings.Join(elepath, " > "), elepressure)
+	fmt.Println(mypressure + elepressure)
 }
