@@ -6,9 +6,12 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 )
 
 const WIDTH = 7
@@ -75,7 +78,7 @@ func (c Column) print() {
 				continue
 			}
 			// playing space
-			t := c.C(Pos{row, col})
+			t := c.C(Pos{row, col}, true)
 			if t == ROCK {
 				fmt.Printf("#")
 			} else if t == FALLING_ROCK {
@@ -88,12 +91,14 @@ func (c Column) print() {
 	}
 }
 
-func (c Column) C(p Pos) int {
+func (c Column) C(p Pos, usePiece bool) int {
 	pxl := AIR
-	if c.piece.top != 0 {
-		t, err := c.piece.C(p)
-		if err == nil {
-			pxl = t
+	if usePiece {
+		if c.piece.top != 0 {
+			t, err := c.piece.C(p)
+			if err == nil {
+				pxl = t
+			}
 		}
 	}
 	if pxl != AIR {
@@ -118,19 +123,34 @@ func (c *Column) Push(dir int) {
 	if err != nil {
 		return
 	}
-	// TODO check for rock intersections
+	if c.TouchesRock(np) {
+		return
+	}
 	c.piece = np
 }
 
 func (c *Column) Drop() bool {
-	oldtop := c.piece.top
-	c.piece.top--
-	// TODO check for rock intersections
-	if c.piece.top-c.piece.height == 0 {
-		// hit the floor!
-		c.piece.top = oldtop // move back up one
+	np := c.piece
+	np.top--
+	if c.TouchesRock(np) {
+		// can't drop, merge where is and stop
 		c.Merge()
 		return true
+	}
+	if np.top-np.height == 0 {
+		// hit the floor!
+		c.Merge()
+		return true
+	}
+	c.piece = np
+	return false
+}
+
+func (c *Column) TouchesRock(p Piece) bool {
+	for _, pos := range p.AbsPixels() {
+		if c.C(pos, false) != AIR {
+			return true
+		}
 	}
 	return false
 }
@@ -200,7 +220,7 @@ func (p Piece) Copy(col int) (Piece, error) {
 	nPxls := map[Pos]int{}
 	for pos, v := range p.pixels {
 		pos.col += col
-		if pos.col < 0 || pos.col > WIDTH {
+		if pos.col < 0 || pos.col >= WIDTH {
 			return Piece{}, InvalidMove
 		}
 		nPxls[pos] = v
@@ -222,6 +242,20 @@ func NewPiece(n string, p []Pos) Piece {
 	return np
 }
 
+func ParseJets(in string) []int {
+	rv := []int{}
+	for n, c := range strings.TrimSpace(in) {
+		if c == '<' {
+			rv = append(rv, LEFT)
+		} else if c == '>' {
+			rv = append(rv, RIGHT)
+		} else {
+			log.Fatalf("bad jet at char %d: %c", n, c)
+		}
+	}
+	return rv
+}
+
 func main() {
 	pieces := []Piece{
 		NewPiece("hline", []Pos{{0, 2}, {0, 3}, {0, 4}, {0, 5}}),
@@ -231,15 +265,25 @@ func main() {
 		NewPiece("square", []Pos{{0, 2}, {0, 3}, {1, 2}, {1, 3}}),
 	}
 
-	for _, p := range pieces {
-		col := NewColumn()
-		fmt.Println(p)
-		col.New(p)
-		col.Print()
-		col.Push(RIGHT)
-		col.Drop()
-		col.Merge()
-		col.Print()
-		fmt.Println("")
+	reader := bufio.NewReader(os.Stdin)
+	jetS, _ := reader.ReadString('\n')
+	jets := ParseJets(jetS)
+	if len(jets) < 1 {
+		log.Fatal("Didn't get jets")
 	}
+
+	col := NewColumn()
+	move := 0
+	for rock := 0; rock < 2022; rock++ {
+		col.New(pieces[rock%len(pieces)])
+		for {
+			col.Push(jets[move%len(jets)])
+			move++
+			if col.Drop() {
+				break
+			}
+		}
+	}
+
+	fmt.Println(col.toprow)
 }
