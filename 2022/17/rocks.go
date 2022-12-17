@@ -62,7 +62,7 @@ func (c Column) print() {
 		top = c.piece.top
 	}
 
-	for row := top; row >= 0; row-- {
+	for row := top; row >= Max(c.toprow-10, 0); row-- {
 		for col := 0; col < WIDTH+2; col++ {
 			// borders
 			if row == 0 {
@@ -89,6 +89,7 @@ func (c Column) print() {
 		}
 		fmt.Println()
 	}
+	fmt.Println()
 }
 
 func (c Column) C(p Pos, usePiece bool) int {
@@ -156,6 +157,7 @@ func (c *Column) TouchesRock(p Piece) bool {
 }
 
 func (c *Column) Merge() {
+	c.Print()
 	for _, pos := range c.piece.AbsPixels() {
 		c.SetC(pos, ROCK)
 	}
@@ -276,13 +278,16 @@ func main() {
 	move := 0
 	for rock := 0; rock < 2022; rock++ {
 		col.New(pieces[rock%len(pieces)])
+		col.Print()
 		for {
 			col.Push(jets[move%len(jets)])
 			move++
 			if col.Drop() {
 				break
 			}
+			col.Print()
 		}
+		fmt.Println()
 	}
 
 	fmt.Println(col.toprow)
