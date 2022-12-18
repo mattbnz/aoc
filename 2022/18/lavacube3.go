@@ -74,8 +74,8 @@ var sidemap = map[int]map[int]int{
 }
 
 const AIR = 0
-const LAVA = 1
-const STEAM = 2
+const LAVA = 10
+const STEAM = 20
 
 type Cube struct {
 	pos Pos
@@ -99,58 +99,35 @@ func (c *Cube) Neighbour(g *Grid, axis, dir int) (*Cube, bool) {
 	return n, found
 }
 
-func (c *Cube) CheckSide(g *Grid, axis, dir int) {
-	sI := sidemap[axis][dir]
-
-	if c.sides[sI].checked {
-		return // neighbour already marked this side, early exit.
-	}
-	n, found := c.Neighbour(g, axis, dir)
-	if !found {
-		// empty space == default, so just return after marking checked
-		c.sides[sI].checked = true
-		return
-	}
-	// mark us and neighbours opposite side as covered
-	c.sides[sI].covered = true
-	c.sides[sI].checked = true
-	nI := sidemap[axis][dir*-1]
-	n.sides[nI].covered = true
-	n.sides[nI].checked = true
-}
-
-func (c *Cube) CheckSides(g *Grid) {
-	for axis, sides := range sidemap {
-		for dir, _ := range sides {
-			c.CheckSide(g, axis, dir)
-		}
-	}
+func (c *Cube) Is(what int) bool {
+	return (c.is/10)*10 == (what/10)*10
 }
 
 func (c *Cube) SideTouching(g *Grid, axis, dir int, what int) bool {
 	n, found := c.Neighbour(g, axis, dir)
 	if !found {
+		//fmt.Println("Missing neighbour for ", c.pos, axis, dir)
 		return false
 	}
-	return n.is == what
+	return n.Is(what)
 }
 
-func (c *Cube) ExpandIfTouching(g *Grid, what int) {
+func (c *Cube) ExpandIfTouching(g *Grid, what int) bool {
 	for axis, sides := range sidemap {
-		for dir, _ := range sides {
+		for dir := range sides {
 			if c.SideTouching(g, axis, dir, what) {
 				c.is = what
-				return
+				return true
 			}
 		}
 	}
-	return
+	return false
 }
 
 func (c *Cube) ExternalSurfaceArea(g *Grid) int {
 	a := 0
 	for axis, sides := range sidemap {
-		for dir, _ := range sides {
+		for dir := range sides {
 			if c.SideTouching(g, axis, dir, STEAM) {
 				a++
 			}
@@ -178,19 +155,36 @@ func NewCube(p Pos, is int) *Cube {
 	return &c
 }
 
-func Print(g *Grid, min, xM, yM, zM int) {
+const P_LAVA = 1
+const P_STEAM = 2
+
+func Print(g *Grid, mode int, min, xM, yM, zM int) {
 	for z := min; z <= zM; z++ {
-		PrintLayer(g, min, xM, yM, z)
+		PrintLayer(g, mode, min, xM, yM, z)
 	}
 }
-func PrintLayer(g *Grid, min, xM, yM, z int) {
+func PrintLayer(g *Grid, mode int, min, xM, yM, z int) {
+	fmt.Printf("  ")
+	for y := 0; y <= yM; y++ {
+		fmt.Printf("%d", y%9)
+	}
+	fmt.Println()
 	for x := min; x <= xM; x++ {
+		fmt.Printf("%d ", x%9)
 		for y := min; y <= yM; y++ {
 			c, present := (*g)[Pos{x, y, z}]
-			if present && c.is == LAVA {
-				fmt.Printf("%d", c.ExternalSurfaceArea(g))
-			} else if present && c.is == STEAM {
-				fmt.Printf("*")
+			if present && c.Is(LAVA) {
+				if mode == P_LAVA {
+					fmt.Printf("%d", c.ExternalSurfaceArea(g))
+				} else {
+					fmt.Print("#")
+				}
+			} else if present && c.Is(STEAM) {
+				if mode == P_STEAM {
+					fmt.Printf("%d", c.is%STEAM)
+				} else {
+					fmt.Printf("*")
+				}
 			} else {
 				fmt.Printf(".")
 			}
@@ -220,19 +214,29 @@ func AddSteam(g *Grid, xM, yM, zM int) {
 	}
 }
 
-func ExpandSteam(g *Grid, xS, yS, zS, step, xE, yE, zE int) {
-	for z := zS; z != zE; z += step {
-		for x := xS; x != xE; x += step {
-			for y := yS; y != yE; y += step {
-				p := Pos{x, y, z}
-				c := (*g)[p]
-				if c.is != AIR {
-					continue
+func ExpandSteam(g *Grid, xM, yM, zM int) {
+	r := 1
+	for {
+		e := 0
+		for z := 0; z <= zM; z++ {
+			for x := 0; x <= xM; x++ {
+				for y := 0; y <= yM; y++ {
+					c := (*g)[Pos{x, y, z}]
+					if !c.Is(AIR) {
+						continue
+					}
+					if c.ExpandIfTouching(g, STEAM+r) {
+						e++
+					}
 				}
-				c.ExpandIfTouching(g, STEAM)
 			}
 		}
-		PrintLayer(g, 0, Max(xS, xE), Max(yS, yE), z)
+		fmt.Printf("Expansion round %d: steam growth=%d\n", r, e)
+		if e == 0 {
+			break
+		}
+		Print(g, P_STEAM, 0, xM, yM, zM)
+		r++
 	}
 }
 
@@ -252,21 +256,20 @@ func main() {
 	fmt.Printf("Loaded %d cubes into grid\n", len(grid))
 	fmt.Println(xM, yM, zM)
 	fmt.Println("Grid:")
-	Print(&grid, 1, xM, yM, zM)
+	Print(&grid, P_LAVA, 1, xM, yM, zM)
 	fmt.Println()
 	AddSteam(&grid, xM, yM, zM)
 
-	fmt.Println("Expanding positively")
-	ExpandSteam(&grid, 1, 1, 1, 1, xM+1, yM+1, zM+1)
-	fmt.Println("Expanding negatively")
-	ExpandSteam(&grid, xM+1, yM+1, zM+1, -1, 0, 0, 0)
+	fmt.Println("Expanding steam")
+	ExpandSteam(&grid, xM+1, yM+1, zM+1)
 
 	fmt.Println("Steamy Grid:")
-	Print(&grid, 0, xM+1, yM+1, zM+1)
+	Print(&grid, P_LAVA, 0, xM+1, yM+1, zM+1)
 
+	fmt.Println("Calculating...")
 	sum := 0
 	for _, c := range grid {
-		if c.is == LAVA {
+		if c.Is(LAVA) {
 			sum += c.ExternalSurfaceArea(&grid)
 		}
 	}
