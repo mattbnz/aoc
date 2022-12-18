@@ -41,7 +41,7 @@ type Pos struct {
 }
 
 func (p Pos) String() string {
-	return fmt.Sprintf("%d,%dm%d", p.x, p.y, p.z)
+	return fmt.Sprintf("%d,%d,%d", p.x, p.y, p.z)
 }
 
 type Side struct {
@@ -99,6 +99,44 @@ func (c *Cube) Neighbour(g *Grid, axis, dir int) (*Cube, bool) {
 	return n, found
 }
 
+func (c *Cube) CheckSide(g *Grid, axis, dir int) {
+	sI := sidemap[axis][dir]
+
+	if c.sides[sI].checked {
+		return // neighbour already marked this side, early exit.
+	}
+	n, found := c.Neighbour(g, axis, dir)
+	if !found || !n.Is(LAVA) {
+		// empty space == default, so just return after marking checked
+		c.sides[sI].checked = true
+		return
+	}
+	// mark us and neighbours opposite side as covered
+	c.sides[sI].covered = true
+	c.sides[sI].checked = true
+	nI := sidemap[axis][dir*-1]
+	n.sides[nI].covered = true
+	n.sides[nI].checked = true
+}
+
+func (c *Cube) CheckSides(g *Grid) {
+	for axis, sides := range sidemap {
+		for dir, _ := range sides {
+			c.CheckSide(g, axis, dir)
+		}
+	}
+}
+
+func (c *Cube) SurfaceArea() int {
+	a := 0
+	for _, side := range c.sides {
+		if !side.covered {
+			a++
+		}
+	}
+	return a
+}
+
 func (c *Cube) Is(what int) bool {
 	return (c.is/10)*10 == (what/10)*10
 }
@@ -124,11 +162,11 @@ func (c *Cube) ExpandIfTouching(g *Grid, what int) bool {
 	return false
 }
 
-func (c *Cube) ExternalSurfaceArea(g *Grid) int {
+func (c *Cube) SurfaceAreaTouching(g *Grid, what int) int {
 	a := 0
 	for axis, sides := range sidemap {
 		for dir := range sides {
-			if c.SideTouching(g, axis, dir, STEAM) {
+			if c.SideTouching(g, axis, dir, what) {
 				a++
 			}
 		}
@@ -141,7 +179,8 @@ func NewCubeString(cS string, is int) *Cube {
 	if len(parts) != 3 {
 		log.Fatal("bad cube dimensions", cS)
 	}
-	p := Pos{Int(parts[0]), Int(parts[1]), Int(parts[2])}
+	// add 1 to avoid zeros in co-ords, since we used them for the border.
+	p := Pos{Int(parts[0]) + 1, Int(parts[1]) + 1, Int(parts[2]) + 1}
 	return NewCube(p, is)
 }
 
@@ -175,7 +214,7 @@ func PrintLayer(g *Grid, mode int, min, xM, yM, z int) {
 			c, present := (*g)[Pos{x, y, z}]
 			if present && c.Is(LAVA) {
 				if mode == P_LAVA {
-					fmt.Printf("%d", c.ExternalSurfaceArea(g))
+					fmt.Printf("%d", c.SurfaceAreaTouching(g, STEAM))
 				} else {
 					fmt.Print("#")
 				}
@@ -194,6 +233,12 @@ func PrintLayer(g *Grid, mode int, min, xM, yM, z int) {
 	fmt.Println()
 }
 
+// ORIGINAL BUG WAS HERE - precisely 5 cubes in my input data had a co-ordinate of 0 and were being
+// ovewritten here... I thought I had checked everything was 1-based co-ordinateds in the input data
+// when choosing to use zero here, but obviously I missed the 5 "edge-cases", literally...
+//
+// Fixed above, by simply adding 1 to all incoming co-ords.
+//
 // Sets up the steam 'border' (using co-ords 0, aX+1 in all dimensions) to ensure we have the
 // starting steam to expand from. Also convert any 'air' cell (internal or external) to an
 // explicit cube (e.g. grid becomes complete, not sparse) of AIR to make later computations easier
@@ -235,7 +280,7 @@ func ExpandSteam(g *Grid, xM, yM, zM int) {
 		if e == 0 {
 			break
 		}
-		Print(g, P_STEAM, 0, xM, yM, zM)
+		//Print(g, P_STEAM, 0, xM, yM, zM)
 		r++
 	}
 }
@@ -253,25 +298,88 @@ func main() {
 		yM = Max(yM, c.pos.y)
 		zM = Max(zM, c.pos.z)
 	}
+	oC := len(grid)
 	fmt.Printf("Loaded %d cubes into grid\n", len(grid))
+	for _, c := range grid {
+		c.CheckSides(&grid)
+	}
+	tSA := 0
+	for _, c := range grid {
+		if c.Is(LAVA) {
+			//fmt.Println("L1: ", c.pos)
+			tSA += c.SurfaceArea()
+		} else {
+			log.Fatal("not lava in initial grid!")
+		}
+	}
+	fmt.Println("Total Surface Area: ", tSA)
+
 	fmt.Println(xM, yM, zM)
 	fmt.Println("Grid:")
-	Print(&grid, P_LAVA, 1, xM, yM, zM)
+	//Print(&grid, P_LAVA, 1, xM, yM, zM)
 	fmt.Println()
 	AddSteam(&grid, xM, yM, zM)
+
+	check1 := 0
+	nLava := 0
+	for _, c := range grid {
+		if c.Is(LAVA) {
+			//fmt.Println("L2: ", c.pos)
+			check1 += c.SurfaceArea()
+			nLava++
+		}
+	}
+	fmt.Println("Total Surface Area (after adding Steam): ", check1)
+	if check1 != tSA {
+		fmt.Println(oC, nLava)
+		log.Fatal("Adding steam border changed lava surface area!")
+	}
 
 	fmt.Println("Expanding steam")
 	ExpandSteam(&grid, xM+1, yM+1, zM+1)
 
 	fmt.Println("Steamy Grid:")
-	Print(&grid, P_LAVA, 0, xM+1, yM+1, zM+1)
+	//Print(&grid, P_LAVA, 0, xM+1, yM+1, zM+1)
 
-	fmt.Println("Calculating...")
-	sum := 0
+	fmt.Println("Calculating external surface area (via steam)...")
+	eSA := 0
 	for _, c := range grid {
 		if c.Is(LAVA) {
-			sum += c.ExternalSurfaceArea(&grid)
+			eSA += c.SurfaceAreaTouching(&grid, STEAM)
 		}
 	}
-	fmt.Println(sum)
+	fmt.Println("External Surface Area: ", eSA)
+
+	fmt.Println("Calculating external surface area (via total - air)...")
+	tSA2 := 0
+	for _, c := range grid {
+		if c.Is(LAVA) {
+			//fmt.Println(c.pos, " is lava", c.SurfaceArea())
+			tSA2 += c.SurfaceArea()
+		}
+	}
+	fmt.Println("Total Surface Area (round 2)", tSA2, " vs ", tSA)
+	tA := 0
+	tL := 0
+	tS := 0
+	tC := 0
+	for _, c := range grid {
+		if c.Is(LAVA) {
+			tC++
+			tA += c.SurfaceAreaTouching(&grid, AIR)
+			tL += c.SurfaceAreaTouching(&grid, LAVA)
+			tS += c.SurfaceAreaTouching(&grid, STEAM)
+		}
+	}
+	fmt.Println("Grid contains: ", tC, " blocks of lava, vs ", oC, " total sides=", tC*6)
+	fmt.Println("Touching:")
+	fmt.Println(" * AIR: ", tA)
+	fmt.Println(" * STEAM: ", tS)
+	fmt.Println(" * LAVA: ", tL)
+	fmt.Println(" = ", tA+tS+tL, " vs ", tC*6)
+	fmt.Println()
+	fmt.Println("External Surface Area (via steam): ", tS)
+	fmt.Println("External Surface Area (tSA2 - air): ", tSA2-tA)
+	fmt.Println("External Surface Area (tSA - air): ", tSA-tA)
+
 }
