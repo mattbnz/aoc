@@ -70,6 +70,7 @@ func PrintList(start *Num, expectedLen int) {
 		fmt.Printf("WARNING: List is not expected length (%d vs %d)\n", len(s), expectedLen)
 	}
 	fmt.Println(strings.Join(s, ", "))
+	fmt.Println()
 }
 
 func Validate(start *Num, expectedItems []*Num) bool {
@@ -93,7 +94,7 @@ func Validate(start *Num, expectedItems []*Num) bool {
 	}
 	for _, i := range expectedItems {
 		if _, exists := present[i.StartPos]; !exists {
-			fmt.Printf("ERROR: Item %d from starting position %d was not found in the list!!\n", i, i.StartPos)
+			fmt.Printf("ERROR: Item %s from starting position %d was not found in the list!!\n", i, i.StartPos)
 			ok = false
 		}
 	}
@@ -172,7 +173,7 @@ func main() {
 			n.Next = o
 			o.Prev = n
 		}
-		if !Validate(order[0], order) {
+		if os.Getenv("VALIDATE") == "1" && !Validate(order[0], order) {
 			fmt.Println("Validity broken after processing item: ", n)
 			PrintList(start, len(order))
 		}
@@ -185,8 +186,47 @@ func main() {
 	twoThou := oneThou.GoN(1000)
 	theThou := twoThou.GoN(1000)
 
+	fmt.Println("Answer via list traversal:")
 	fmt.Println(oneThou)
 	fmt.Println(twoThou)
 	fmt.Println(theThou)
 	fmt.Println(oneThou.Value + twoThou.Value + theThou.Value)
+	fmt.Println()
+
+	fmt.Println("Cross-check answer via list indexing:")
+	end := []*Num{}
+	item := start
+	n := 0
+	var endZero *Num
+	endZeroAt := -1
+	for {
+		end = append(end, item)
+		if item.Value == 0 {
+			if endZero != nil {
+				log.Fatal("two zeros at end!")
+			}
+			endZero = item
+			endZeroAt = n
+		}
+		n++
+		item = item.Next
+		if item == start {
+			break
+		}
+	}
+	if len(end) != len(order) {
+		log.Fatal("end list is not the right lenght")
+	}
+	if endZero != zero {
+		log.Fatal("zero has changed!")
+	}
+	fmt.Println(len(end), " Items", n)
+	fmt.Println("End Zero is item #", endZeroAt)
+	i1 := (endZeroAt + 1000) % len(end)
+	i2 := (endZeroAt + 2000) % len(end)
+	i3 := (endZeroAt + 3000) % len(end)
+	fmt.Printf("1000th value is #%d (aka %d) == %d\n", endZeroAt+1000, i1, end[i1].Value)
+	fmt.Printf("2000th value is #%d (aka %d) == %d\n", endZeroAt+2000, i2, end[i2].Value)
+	fmt.Printf("3000th value is #%d (aka %d) == %d\n", endZeroAt+3000, i3, end[i3].Value)
+	fmt.Println(end[i1].Value + end[i2].Value + end[i3].Value)
 }
