@@ -200,8 +200,8 @@ func main() {
 			n.Next = o
 			o.Prev = n
 		}
-		DebugList(i, start)
 		if os.Getenv("VALIDATE") == "1" && !Validate(order[0], order) {
+			DebugList(i, start)
 			fmt.Println("Validity broken after processing item: ", n)
 			PrintList(start, len(order))
 		}
