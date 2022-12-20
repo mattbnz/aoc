@@ -119,6 +119,16 @@ func Validate(start *Num, expectedItems []*Num) bool {
 	return ok
 }
 
+func Answer(zero *Num) {
+	oneThou := zero.GoN(1000)
+	twoThou := oneThou.GoN(1000)
+	theThou := twoThou.GoN(1000)
+
+	fmt.Printf("Answer: %d + %d + %d = %d\n",
+		oneThou.Value, twoThou.Value, theThou.Value,
+		oneThou.Value+twoThou.Value+theThou.Value)
+}
+
 func main() {
 	s := bufio.NewScanner(os.Stdin)
 
@@ -148,6 +158,9 @@ func main() {
 	fmt.Println("List length: ", len(order))
 	for _, i := range order {
 		i.ModValue = i.Value % len(order)
+		if i.ModValue == 0 {
+			fmt.Println(i.StartPos, i, i.ModValue, " is interesting")
+		}
 	}
 
 	// Complete the list to be a loop (yowsers!)
@@ -161,6 +174,7 @@ func main() {
 	start := order[0]
 	flag := false
 	for i, n := range order {
+		fmt.Printf("Input %d: Moving %s\n", i, n)
 		// Go in the direction our value dictates
 		o := n.Go()
 		if o == n {
@@ -200,8 +214,9 @@ func main() {
 			n.Next = o
 			o.Prev = n
 		}
+		Answer(zero)
+		DebugList(i, start)
 		if os.Getenv("VALIDATE") == "1" && !Validate(order[0], order) {
-			DebugList(i, start)
 			fmt.Println("Validity broken after processing item: ", n)
 			PrintList(start, len(order))
 		}
@@ -209,16 +224,8 @@ func main() {
 	}
 
 	PrintList(start, len(order))
-
-	oneThou := zero.GoN(1000)
-	twoThou := oneThou.GoN(1000)
-	theThou := twoThou.GoN(1000)
-
 	fmt.Println("Answer via list traversal:")
-	fmt.Println(oneThou)
-	fmt.Println(twoThou)
-	fmt.Println(theThou)
-	fmt.Println(oneThou.Value + twoThou.Value + theThou.Value)
+	Answer(zero)
 	fmt.Println()
 
 	fmt.Println("Cross-check answer via list indexing:")
@@ -249,7 +256,7 @@ func main() {
 		log.Fatal("zero has changed!")
 	}
 	fmt.Println(len(end), " Items", n)
-	fmt.Println("End Zero is item #", endZeroAt)
+	fmt.Println("End Zero is item #", endZeroAt, endZero, zero)
 	i1 := (endZeroAt + 1000) % len(end)
 	i2 := (endZeroAt + 2000) % len(end)
 	i3 := (endZeroAt + 3000) % len(end)
