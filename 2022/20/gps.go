@@ -1,7 +1,7 @@
 // Copyright (C) 2022 Matt Brown
 
 // Advent of Code 2022 - Day 19, Puzzle 1.
-// Not Enough Minerals. Robots to the rescue.
+// Grove Positioning System - decryption mixing.
 
 package main
 
@@ -32,6 +32,7 @@ func Abs(i int) int {
 type Num struct {
 	StartPos int // maybe useless? keep JIC.
 	Value    int
+	ModValue int
 
 	Next *Num
 	Prev *Num
@@ -71,6 +72,23 @@ func PrintList(start *Num, expectedLen int) {
 	}
 	fmt.Println(strings.Join(s, ", "))
 	fmt.Println()
+}
+
+func DebugList(n int, start *Num) {
+	f, err := os.Create(fmt.Sprintf("debug/%d", n))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	item := start
+	for {
+		f.WriteString(fmt.Sprintf("%s %d\n", item, item.ModValue))
+		item = item.Next
+		if item == start {
+			break
+		}
+	}
 }
 
 func Validate(start *Num, expectedItems []*Num) bool {
@@ -127,17 +145,22 @@ func main() {
 			zero = n
 		}
 	}
+	fmt.Println("List length: ", len(order))
+	for _, i := range order {
+		i.ModValue = i.Value % len(order)
+	}
 
 	// Complete the list to be a loop (yowsers!)
 	last.Next = order[0]
 	order[0].Prev = last
-	PrintList(order[0], len(order))
+	//PrintList(order[0], len(order))
 	fmt.Println("List validity: ", Validate(order[0], order))
 	fmt.Println()
 
 	// Now do the mixing
 	start := order[0]
-	for _, n := range order {
+	flag := false
+	for i, n := range order {
 		// Go in the direction our value dictates
 		o := n.Go()
 		if o == n {
@@ -146,6 +169,10 @@ func main() {
 		}
 		if n.Next == o || n.Prev == o {
 			fmt.Println(n, " and ", o, " are adjacent!")
+		}
+		if n != start && !flag {
+			fmt.Println("First non-start move at ", i)
+			flag = true
 		}
 		// Take ourselves out of our current position
 		if n == start {
@@ -173,6 +200,7 @@ func main() {
 			n.Next = o
 			o.Prev = n
 		}
+		DebugList(i, start)
 		if os.Getenv("VALIDATE") == "1" && !Validate(order[0], order) {
 			fmt.Println("Validity broken after processing item: ", n)
 			PrintList(start, len(order))
