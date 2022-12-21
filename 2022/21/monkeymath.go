@@ -1,7 +1,7 @@
 // Copyright (C) 2022 Matt Brown
 
-// Advent of Code 2022 - Day 19, Puzzle 1.
-// Grove Positioning System - decryption mixing.
+// Advent of Code 2022 - Day 21, Puzzle 1.
+// Monkey Math.
 
 package main
 
@@ -55,6 +55,7 @@ func (m *Monkey) Result(monkeys MonkeyMap) int {
 
 	leftV := monkeys[m.Left].Result(monkeys)
 	rightV := monkeys[m.Right].Result(monkeys)
+	fmt.Println(leftV, rightV)
 	if m.Op == "+" {
 		return leftV + rightV
 	} else if m.Op == "-" {
