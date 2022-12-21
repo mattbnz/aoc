@@ -1,6 +1,6 @@
 // Copyright (C) 2022 Matt Brown
 
-// Advent of Code 2022 - Day 19, Puzzle 1.
+// Advent of Code 2022 - Day 20, Puzzle 1.
 // Grove Positioning System - decryption mixing.
 
 package main
@@ -42,16 +42,26 @@ func (n *Num) String() string {
 	return fmt.Sprintf("%d", n.Value)
 }
 func (n *Num) Go() *Num {
-	return n.GoN(n.Value)
+	return n.GoN(n.Value, true)
 }
 
-func (n *Num) GoN(amount int) *Num {
+func (n *Num) GoN(amount int, excludeSelf bool) *Num {
 	num := n
 	for i := Abs(amount); i > 0; i-- {
 		if amount > 0 {
 			num = num.Next
 		} else {
 			num = num.Prev
+		}
+		if num == n && excludeSelf {
+			fmt.Println("Jumping ourselves!")
+			// Looped back to ourselves!! skip over ourself (we already 'moved out' of that spot)
+			// SIGH. Thanks to https://www.reddit.com/r/adventofcode/comments/zqz93r/comment/j11olth
+			if amount > 0 {
+				num = num.Next
+			} else {
+				num = num.Prev
+			}
 		}
 	}
 	return num
@@ -120,9 +130,9 @@ func Validate(start *Num, expectedItems []*Num) bool {
 }
 
 func Answer(zero *Num) {
-	oneThou := zero.GoN(1000)
-	twoThou := oneThou.GoN(1000)
-	theThou := twoThou.GoN(1000)
+	oneThou := zero.GoN(1000, false)
+	twoThou := oneThou.GoN(1000, false)
+	theThou := twoThou.GoN(1000, false)
 
 	fmt.Printf("Answer: %d + %d + %d = %d\n",
 		oneThou.Value, twoThou.Value, theThou.Value,
@@ -174,7 +184,7 @@ func main() {
 	start := order[0]
 	//flag := false
 	for i, n := range order {
-		PrintList(start, len(order))
+		//PrintList(start, len(order))
 		fmt.Printf("Input %d: Moving %s: ", i, n)
 		// Go in the direction our value dictates
 		o := n.Go()
@@ -215,7 +225,7 @@ func main() {
 			n.Next = o
 			o.Prev = n
 		}
-		PrintList(start, len(order))
+		//PrintList(start, len(order))
 		//Answer(zero)
 		//DebugList(i, start)
 		if os.Getenv("VALIDATE") == "1" && !Validate(order[0], order) {
