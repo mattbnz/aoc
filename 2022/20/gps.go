@@ -71,7 +71,7 @@ func PrintList(start *Num, expectedLen int) {
 		fmt.Printf("WARNING: List is not expected length (%d vs %d)\n", len(s), expectedLen)
 	}
 	fmt.Println(strings.Join(s, ", "))
-	fmt.Println()
+	//fmt.Println()
 }
 
 func DebugList(n int, start *Num) {
@@ -172,22 +172,23 @@ func main() {
 
 	// Now do the mixing
 	start := order[0]
-	flag := false
+	//flag := false
 	for i, n := range order {
-		fmt.Printf("Input %d: Moving %s\n", i, n)
+		PrintList(start, len(order))
+		fmt.Printf("Input %d: Moving %s: ", i, n)
 		// Go in the direction our value dictates
 		o := n.Go()
 		if o == n {
 			fmt.Println("Found ourself (expected for zero): ", n)
 			continue
 		}
-		if n.Next == o || n.Prev == o {
+		/*if n.Next == o || n.Prev == o {
 			fmt.Println(n, " and ", o, " are adjacent!")
 		}
 		if n != start && !flag {
 			fmt.Println("First non-start move at ", i)
 			flag = true
-		}
+		}*/
 		// Take ourselves out of our current position
 		if n == start {
 			start = n.Next
@@ -197,7 +198,7 @@ func main() {
 		// Put ourselves "after" the item we ended up on.
 		if n.Value > 0 {
 			if o.Next == start {
-				fmt.Println("we're now the start (A)!", n, n.StartPos)
+				//fmt.Println("we're now the start (A)!", n, n.StartPos)
 				start = n
 			}
 			n.Next = o.Next
@@ -206,7 +207,7 @@ func main() {
 			o.Next = n
 		} else {
 			if o.Prev == start {
-				fmt.Println("we're now the start (B)!", n, n.StartPos)
+				//fmt.Println("we're now the start (B)!", n, n.StartPos)
 				start = n
 			}
 			n.Prev = o.Prev
@@ -214,13 +215,14 @@ func main() {
 			n.Next = o
 			o.Prev = n
 		}
-		Answer(zero)
-		DebugList(i, start)
+		PrintList(start, len(order))
+		//Answer(zero)
+		//DebugList(i, start)
 		if os.Getenv("VALIDATE") == "1" && !Validate(order[0], order) {
 			fmt.Println("Validity broken after processing item: ", n)
 			PrintList(start, len(order))
 		}
-
+		fmt.Println()
 	}
 
 	PrintList(start, len(order))

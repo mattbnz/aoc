@@ -29,6 +29,8 @@ func Abs(i int) int {
 	return i
 }
 
+type MonkeyMap map[string]*Monkey
+
 type Monkey struct {
 	Name   string
 	Number int // for announcing monkeys
@@ -44,6 +46,26 @@ func (m *Monkey) String() string {
 	} else {
 		return fmt.Sprintf("%s: %s %s %s", m.Name, m.Left, m.Op, m.Right)
 	}
+}
+
+func (m *Monkey) Result(monkeys MonkeyMap) int {
+	if m.Number != 0 {
+		return m.Number
+	}
+
+	leftV := monkeys[m.Left].Result(monkeys)
+	rightV := monkeys[m.Right].Result(monkeys)
+	if m.Op == "+" {
+		return leftV + rightV
+	} else if m.Op == "-" {
+		return leftV - rightV
+	} else if m.Op == "*" {
+		return leftV * rightV
+	} else if m.Op == "/" {
+		return leftV / rightV
+	}
+	log.Fatal("Bad Monkey Result: ", m)
+	return -1
 }
 
 var MATH_MONKEY_RE = regexp.MustCompile(`([a-z]+): ([a-z]+) ([+*/-]) ([a-z]+)`)
@@ -74,12 +96,15 @@ func NewMonkey(s string) *Monkey {
 func main() {
 	s := bufio.NewScanner(os.Stdin)
 
-	monkeys := []*Monkey{}
-
+	monkeys := MonkeyMap{}
 	for s.Scan() {
 		m := NewMonkey(s.Text())
-		fmt.Println(m)
-		monkeys = append(monkeys, m)
-
+		monkeys[m.Name] = m
 	}
+
+	root := monkeys["root"]
+	if root == nil {
+		log.Fatal("no root monkey")
+	}
+	fmt.Println(root.Result(monkeys))
 }
