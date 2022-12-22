@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 )
 
@@ -46,6 +47,36 @@ const VOID = 0
 const OPEN = 1
 const WALL = 2
 
+const S_LEFT = "L"
+const S_RIGHT = "R"
+
+var DIR_S = map[Direction]string{
+	D_RIGHT: ">",
+	D_DOWN:  "v",
+	D_LEFT:  ">",
+	D_UP:    "^",
+}
+
+var TURN_MAP = map[Direction]map[string]Direction{
+	D_RIGHT: {S_LEFT: D_UP, S_RIGHT: D_DOWN},
+	D_DOWN:  {S_LEFT: D_RIGHT, S_RIGHT: D_LEFT},
+	D_LEFT:  {S_LEFT: D_DOWN, S_RIGHT: D_UP},
+	D_UP:    {S_LEFT: D_LEFT, S_RIGHT: D_RIGHT},
+}
+
+type Direction int
+
+const (
+	D_RIGHT Direction = iota
+	D_DOWN
+	D_LEFT
+	D_UP
+)
+
+func (d Direction) String() string {
+	return DIR_S[d]
+}
+
 type Grid struct {
 	c              map[Pos]int
 	maxrow, maxcol int
@@ -77,6 +108,55 @@ func (g *Grid) SetC(p Pos, v int) {
 	g.maxcol = Max(g.maxcol, p.col)
 }
 
+func (g *Grid) Next(from Pos, heading Direction) Pos {
+	if heading == D_RIGHT {
+		return Pos{from.row, from.col + 1}
+	} else if heading == D_DOWN {
+		return Pos{from.row + 1, from.col}
+	} else if heading == D_LEFT {
+		return Pos{from.row, from.col - 1}
+	} else if heading == D_UP {
+		return Pos{from.row - 1, from.col}
+	}
+	return Pos{}
+}
+
+func (g *Grid) Wrap(from Pos, heading Direction) Pos {
+	back := TURN_MAP[TURN_MAP[heading][S_LEFT]][S_LEFT] // left twice == reverse.
+	at := from
+	for g.C(at) != VOID {
+		at = g.Next(at, back)
+	}
+	// at this point we're off the map on the otherside, so return one back in the other direction
+	// for the first map spot
+	return g.Next(at, heading)
+}
+
+func (g *Grid) Nav(from Pos, heading Direction, steps int) Pos {
+	at := from
+	for i := 0; i < steps; i++ {
+		next := g.Next(at, heading)
+		if g.C(next) == OPEN {
+			at = next
+			continue
+		}
+		if g.C(next) == WALL {
+			return at
+		}
+		if g.C(next) == VOID {
+			next = g.Wrap(at, heading)
+			if g.C(next) == OPEN {
+				at = next
+				continue
+			}
+			if g.C(next) == WALL {
+				return at
+			}
+		}
+	}
+	return at
+}
+
 func NewGrid() Grid {
 	g := Grid{c: map[Pos]int{}}
 	g.maxrow = -1
@@ -84,12 +164,14 @@ func NewGrid() Grid {
 	return g
 }
 
+var I_RE = regexp.MustCompile(`([LR])?(\d+)`)
+
 func main() {
 	s := bufio.NewScanner(os.Stdin)
 
 	g := NewGrid()
 
-	var firstPos *Pos
+	var firstPos Pos
 	row := 1
 	for s.Scan() {
 		if s.Text() == "" {
@@ -102,8 +184,8 @@ func main() {
 			if c == '.' {
 				p := Pos{row, col + 1}
 				g.SetC(p, OPEN)
-				if firstPos == nil {
-					firstPos = &p
+				if firstPos.row == 0 {
+					firstPos = p
 				}
 			} else if c == '#' {
 				g.SetC(Pos{row, col + 1}, WALL)
@@ -118,7 +200,22 @@ func main() {
 	}
 	instructions := s.Text()
 	g.Print()
-
+	fmt.Println()
 	fmt.Println(instructions)
-	fmt.Println(firstPos)
+	fmt.Println()
+
+	pos := firstPos
+	heading := D_RIGHT
+	for step, i := range I_RE.FindAllStringSubmatch(instructions, -1) {
+		fmt.Printf("* Step %d, at %s going %s\n", step, pos, heading)
+		if i[1] != "" {
+			heading = TURN_MAP[heading][i[1]]
+			fmt.Printf("  - Turn %s, Heading: %s\n", i[1], heading)
+		}
+		fmt.Printf("  - Moving %s steps\n", i[2])
+		pos = g.Nav(pos, heading, Int(i[2]))
+		fmt.Println()
+	}
+	fmt.Printf("Finished at: %s going %s\n", pos, heading)
+	fmt.Printf("Password: %d * 1000 + %d * 4 + %d = %d\n", pos.row, pos.col, heading, pos.row*1000+pos.col*4+int(heading))
 }
