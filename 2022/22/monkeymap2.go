@@ -13,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 func Max(a, b int) int {
@@ -151,18 +152,23 @@ func (s Side) String() string {
 func (s Side) Print() {
 	fmt.Println(s)
 	for row := 0; row < s.Size; row++ {
-		for col := 0; col < s.Size; col++ {
-			c := s.C(Pos{row, col})
-			if c == VOID {
-				fmt.Printf(" ")
-			} else if c == OPEN {
-				fmt.Printf(".")
-			} else if c == WALL {
-				fmt.Printf("#")
-			}
-		}
-		fmt.Println()
+		fmt.Println(s.FormatRow(row))
 	}
+}
+
+func (s Side) FormatRow(row int) string {
+	str := ""
+	for col := 0; col < s.Size; col++ {
+		c := s.C(Pos{row, col})
+		if c == VOID {
+			str += " "
+		} else if c == OPEN {
+			str += "."
+		} else if c == WALL {
+			str += "#"
+		}
+	}
+	return str
 }
 
 func (s Side) C(p Pos) int {
@@ -300,10 +306,10 @@ func (c *Cube) Fold(sides map[Pos]*Side, side Pos, position CubeSide, rotation R
 		if next, exists := remSides[opos]; exists {
 			rot := R_NONE
 			// TODO: UNSURE ABOUT THIS BLOCK...
-			if nd, found := SIDE_MAP[dir][rotation]; found {
+			/*if nd, found := SIDE_MAP[dir][rotation]; found {
 				dir = nd       // if this side got rotated, then attached sides moved too, so replace dir
 				rot = rotation // make sure it gets rotated with this side too.
-			}
+			}*/
 			// TODO: UNSURE ABOUT THIS BLOCK...
 			wrap := C_MAP[position][dir]
 			if wrap.Rotation != R_NONE {
@@ -518,6 +524,48 @@ func SidePoints(input map[Pos]int, size int, row, col int) map[Pos]int {
 	return rv
 }
 
+// Dumps input in normalized form
+func DumpNormalized(sides map[Pos]*Side, size int) {
+	f, err := os.Create("input2")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	// first grid row
+	back := sides[Pos{0, 1}]
+	right := sides[Pos{0, 2}]
+	for row := 0; row < size; row++ {
+		f.WriteString(strings.Repeat(" ", size*2))
+		f.WriteString(back.FormatRow(row))
+		f.WriteString(right.FormatRow(row))
+		f.WriteString("\n")
+	}
+
+	// second grid row
+	top := sides[Pos{1, 1}]
+
+	for row := 0; row < size; row++ {
+		f.WriteString(strings.Repeat(" ", size*2))
+		f.WriteString(top.FormatRow(row))
+
+		f.WriteString("\n")
+	}
+
+	// Third grid row
+	front := sides[Pos{2, 1}]
+	bot := sides[Pos{3, 0}]
+	bot.Rotate(R_CW)
+	left := sides[Pos{2, 0}]
+	for row := 0; row < size; row++ {
+		f.WriteString(bot.FormatRow(row))
+		f.WriteString(left.FormatRow(row))
+		f.WriteString(front.FormatRow(row))
+		f.WriteString("\n")
+	}
+	f.WriteString("\n")
+}
+
 // Parses the 2D input grid into a 3D cube with sides
 func NewCube(input map[Pos]int) (Cube, CubePos) {
 	rows := 0
@@ -548,6 +596,8 @@ func NewCube(input map[Pos]int) (Cube, CubePos) {
 	if len(sides) != 6 {
 		log.Fatalf("Found %d sides, expected 6!", len(sides))
 	}
+
+	//DumpNormalized(sides, size)
 
 	// Find 3 consecutive sides, and make the middle one our "top"
 	top := Pos{-1, -1}
