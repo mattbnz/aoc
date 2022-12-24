@@ -42,59 +42,204 @@ func (p Pos) String() string {
 	return fmt.Sprintf("%d,%d", p.row, p.col)
 }
 
-type Content int
+type Blizzard int
 
 const (
-	OPEN = iota
-	WALL
-	BLIZZARD_LEFT
-	BLIZZARD_RIGHT
-	BLIZZARD_UP
-	BLIZZARD_DOWN
+	LEFT Blizzard = iota
+	RIGHT
+	UP
+	DOWN
 )
 
-var StrToContent = map[string]Content{
-	"#": WALL,
-	".": OPEN,
-	">": BLIZZARD_RIGHT,
-	"<": BLIZZARD_LEFT,
-	"^": BLIZZARD_UP,
-	"v": BLIZZARD_DOWN,
-}
-var ContentToStr = map[Content]string{}
-
-func init() {
-	for s, c := range StrToContent {
-		ContentToStr[c] = s
+func (b Blizzard) String() string {
+	if b == LEFT {
+		return "<"
+	} else if b == RIGHT {
+		return ">"
+	} else if b == UP {
+		return "^"
+	} else if b == DOWN {
+		return "v"
 	}
+	return "!"
 }
+
+func NewBlizzard(s string) (Blizzard, error) {
+	if s == "<" {
+		return LEFT, nil
+	} else if s == ">" {
+		return RIGHT, nil
+	} else if s == "^" {
+		return UP, nil
+	} else if s == "v" {
+		return DOWN, nil
+	}
+	return LEFT, fmt.Errorf("%s is not a blizzard!", s)
+}
+
+type Cell struct {
+	W bool              // wall
+	E bool              // expedition presence
+	B map[Blizzard]bool // blizard presence
+}
+
+func (c Cell) String() string {
+	if c.W {
+		return "#"
+	}
+	if c.E {
+		return "E"
+	}
+	bs := ""
+	for b, p := range c.B {
+		if !p {
+			continue
+		}
+		bs += b.String()
+	}
+	if len(bs) == 0 {
+		return "."
+	}
+	if len(bs) > 1 {
+		return fmt.Sprintf("%d", len(bs))
+	}
+	return bs
+}
+
+func (c Cell) Open() bool {
+	if c.W {
+		return false
+	}
+	for _, b := range c.B {
+		if b {
+			return false
+		}
+	}
+	return true
+}
+
+func NewCell(s string) Cell {
+	c := Cell{B: map[Blizzard]bool{}}
+	if s == "#" {
+		c.W = true
+		return c
+	}
+	b, err := NewBlizzard(s)
+	if err == nil {
+		c.B[b] = true
+	}
+	return c
+}
+
+const NOW = -1
 
 type Grid struct {
-	c              map[Pos]Content
+	c              map[Pos]map[int]Cell
 	maxrow, maxcol int
+
+	minute int
 }
 
 func (g Grid) Print() {
+	fmt.Printf("Minute %d:\n", g.minute)
 	for row := 1; row <= g.maxrow; row++ {
 		for col := 1; col <= g.maxcol; col++ {
-			fmt.Printf(ContentToStr[g.C(Pos{row, col})])
+			fmt.Print(g.C(Pos{row, col}, NOW))
 		}
 		fmt.Println()
 	}
+	fmt.Println()
 }
 
-func (g Grid) C(p Pos) Content {
-	return g.c[p] // default val if missing == VOID
+func (g Grid) C(p Pos, min int) Cell {
+	if min == NOW {
+		min = g.minute
+	}
+	return g.c[p][min]
 }
 
-func (g *Grid) SetC(p Pos, v Content) {
-	g.c[p] = v
+func (g *Grid) SetC(p Pos, min int, v Cell) {
+	if min == NOW {
+		min = g.minute
+	}
+	if _, found := g.c[p]; found {
+		g.c[p][min] = v
+	} else {
+		g.c[p] = map[int]Cell{min: v}
+	}
 	g.maxrow = Max(g.maxrow, p.row)
 	g.maxcol = Max(g.maxcol, p.col)
 }
 
+// Make a copy of every cell, with the expedition and blizzards removed
+func (g *Grid) PrepMinute(min int) {
+	for p, mins := range g.c {
+		if p.row == 1 || p.row == g.maxrow || p.col == 1 || p.col == g.maxcol {
+			c := mins[g.minute]
+			c.E = false
+			g.SetC(p, min, c) // Wall, copy but clear expedition
+		} else {
+			g.SetC(p, min, NewCell(""))
+		}
+	}
+}
+
+// Increments a minute, aka moves all the blizzards
+// Does not move the expedition.
+func (g *Grid) Inc() {
+	next := g.minute + 1
+	g.PrepMinute(next)
+
+	for row := 0; row <= g.maxrow; row++ {
+		for col := 0; col <= g.maxcol; col++ {
+			p := Pos{row, col}
+			c := g.C(p, NOW)
+			if c.W {
+				continue
+			}
+			for b, here := range c.B {
+				if !here {
+					continue
+				}
+				np := g.IncBlizzard(p, b)
+				nc := g.C(np, next)
+				nc.B[b] = true
+				g.SetC(np, next, nc)
+			}
+		}
+	}
+	g.minute = next
+}
+
+// Returns next pos of blizzard moving in Blizzard dir from p
+func (g *Grid) IncBlizzard(p Pos, b Blizzard) Pos {
+	np := Pos{p.row, p.col}
+	if b == LEFT {
+		np.col--
+	} else if b == RIGHT {
+		np.col++
+	} else if b == UP {
+		np.row--
+	} else if b == DOWN {
+		np.row++
+	}
+	if np.row == g.maxrow {
+		np.row = 2 // 1 == wall
+	}
+	if np.row == 1 {
+		np.row = g.maxrow - 1
+	}
+	if np.col == g.maxcol {
+		np.col = 2
+	}
+	if np.col == 1 {
+		np.col = g.maxcol - 1
+	}
+	return np
+}
+
 func NewGrid() Grid {
-	g := Grid{c: map[Pos]Content{}}
+	g := Grid{c: map[Pos]map[int]Cell{}}
 	g.maxrow = -1
 	g.maxcol = -1
 	return g
@@ -109,10 +254,18 @@ func main() {
 	for s.Scan() {
 		for col, c := range s.Text() {
 			p := Pos{row, col + 1}
-			g.SetC(p, StrToContent[string(c)])
+			c := NewCell(string(c))
+			if row == 1 && c.Open() {
+				c.E = true
+			}
+			g.SetC(p, NOW, c)
 		}
 		row++
 	}
 
 	g.Print()
+	for i := 0; i < 18; i++ {
+		g.Inc()
+		g.Print()
+	}
 }
