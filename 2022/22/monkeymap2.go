@@ -120,8 +120,8 @@ var R_STR = map[Rotation]string{
 // how side adjacencies move when rotating
 var SIDE_MAP = map[Direction]map[Rotation]Direction{
 	D_UP:    {R_ANTI_CW: D_LEFT, R_CW: D_RIGHT},
+	D_DOWN:  {R_ANTI_CW: D_RIGHT, R_CW: D_LEFT, R_FLIPC: D_LEFT},
 	D_LEFT:  {R_ANTI_CW: D_DOWN, R_CW: D_UP, R_FLIPC: D_RIGHT},
-	D_DOWN:  {R_ANTI_CW: D_LEFT, R_CW: D_RIGHT, R_FLIPC: D_LEFT},
 	D_RIGHT: {R_ANTI_CW: D_UP, R_CW: D_DOWN},
 }
 
@@ -196,22 +196,16 @@ func (s *Side) Rotate(rotation Rotation) {
 		}
 	} else if rotation == R_CW {
 		for p, what := range s.c {
-			sc[Pos{p.col, s.Size - (s.Size - 1 - p.row)}] = what
+			sc[Pos{p.col, s.Size - 1 - p.row}] = what
 		}
 	} else if rotation == R_FLIPC {
 		for p, what := range s.c {
 			sc[Pos{p.row, s.Size - 1 - p.col}] = what
 		}
 	}
-	ns := Side{SidePos: s.SidePos, c: sc, Size: s.Size, Transform: rotation}
-	ns.next = map[Direction]*Side{}
-	for d, os := range s.next {
-		if nd, found := SIDE_MAP[d][rotation]; found {
-			ns.next[nd] = os
-		}
-	}
-	ns.Print()
-	*s = ns
+	s.Transform = rotation
+	s.c = sc
+	s.Print()
 }
 
 // Converts c to relative co-ords and returns a side of them
@@ -291,8 +285,8 @@ func (c *Cube) Fold(sides map[Pos]*Side, side Pos, position CubeSide, rotation R
 		}
 	}
 
-	s.Rotate(rotation)
 	s.Orientation = position
+	s.Rotate(rotation)
 	c.sides[position] = s
 
 	for dir := range DIR_S {
@@ -304,9 +298,19 @@ func (c *Cube) Fold(sides map[Pos]*Side, side Pos, position CubeSide, rotation R
 		// TODO: Need to normalize, transform!
 		opos := OriginPos(side, dir /*I_MAP[position][dir]*/)
 		if next, exists := remSides[opos]; exists {
+			rot := R_NONE
+			// TODO: UNSURE ABOUT THIS BLOCK...
+			if nd, found := SIDE_MAP[dir][rotation]; found {
+				dir = nd       // if this side got rotated, then attached sides moved too, so replace dir
+				rot = rotation // make sure it gets rotated with this side too.
+			}
+			// TODO: UNSURE ABOUT THIS BLOCK...
 			wrap := C_MAP[position][dir]
-			fmt.Printf(" needs to fold %s (%s) to make %s side\n", next, wrap.Rotation, wrap.Side)
-			c.Fold(remSides, opos, wrap.Side, wrap.Rotation)
+			if wrap.Rotation != R_NONE {
+				rot = wrap.Rotation
+			}
+			fmt.Printf(" needs to fold %s (%s) to make %s side\n", next, rot, wrap.Side)
+			c.Fold(remSides, opos, wrap.Side, rot)
 			continue
 		} /*else {
 			log.Fatalf("Cannot find %s side for %")
@@ -348,7 +352,7 @@ var C_MAP = map[CubeSide]map[Direction]WrapSpec{
 
 	CS_FRONT: {
 		D_UP:    {CS_TOP, Pos{T_MAX, T_MATCHC}, D_UP, R_NONE},
-		D_LEFT:  {CS_LEFT, Pos{T_MAX, T_MATCHR_I}, D_UP, R_ANTI_CW},
+		D_LEFT:  {CS_LEFT, Pos{T_MAX, T_MATCHR_I}, D_UP, R_CW},
 		D_RIGHT: {CS_RIGHT, Pos{T_MAX, T_MATCHR}, D_UP, R_ANTI_CW},
 		D_DOWN:  {CS_BOTTOM, Pos{T_MAX, T_MATCHC_I}, D_UP, R_FLIPR},
 	},
@@ -361,14 +365,14 @@ var C_MAP = map[CubeSide]map[Direction]WrapSpec{
 
 	CS_LEFT: {
 		D_UP:    {CS_BACK, Pos{T_MATCHC, T_MIN}, D_RIGHT, R_CW},
-		D_LEFT:  {CS_BOTTOM, Pos{T_MATCHR, T_MIN}, D_RIGHT, R_NONE}, // bottom already rotated in this state
+		D_LEFT:  {CS_BOTTOM, Pos{T_MATCHR, T_MAX}, D_LEFT, R_NONE}, // bottom already rotated in this state
 		D_RIGHT: {CS_TOP, Pos{T_MATCHR, T_MIN}, D_RIGHT, R_NONE},
 		D_DOWN:  {CS_FRONT, Pos{T_MATCHC_I, T_MIN}, D_RIGHT, R_ANTI_CW},
 	},
 	CS_RIGHT: {
 		D_UP:    {CS_BACK, Pos{T_MATCHC_I, T_MAX}, D_LEFT, R_ANTI_CW},
 		D_LEFT:  {CS_TOP, Pos{T_MATCHR, T_MAX}, D_LEFT, R_NONE},
-		D_RIGHT: {CS_BOTTOM, Pos{T_MATCHR, T_MAX}, D_LEFT, R_FLIPC},
+		D_RIGHT: {CS_BOTTOM, Pos{T_MATCHR, T_MIN}, D_RIGHT, R_FLIPC},
 		D_DOWN:  {CS_FRONT, Pos{T_MATCHC, T_MAX}, D_LEFT, R_CW},
 	},
 }
@@ -418,7 +422,7 @@ func (c *Cube) TransformPos(p Pos, t Pos) Pos {
 		np.col = c.Size - 1 - p.col
 	} else if t.col == T_MATCHR {
 		np.col = p.row
-	} else if t.row == T_MATCHR_I {
+	} else if t.col == T_MATCHR_I {
 		np.col = c.Size - 1 - p.row
 	} else {
 		log.Fatalf("Unknown col transform from %s to %s", p, t)
