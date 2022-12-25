@@ -7,6 +7,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"os"
@@ -78,9 +79,10 @@ func NewBlizzard(s string) (Blizzard, error) {
 }
 
 type Cell struct {
-	W bool              // wall
-	E bool              // expedition presence
-	B map[Blizzard]bool // blizard presence
+	exists bool
+	W      bool              // wall
+	E      bool              // expedition presence
+	B      map[Blizzard]bool // blizard presence
 }
 
 func (c Cell) String() string {
@@ -119,7 +121,7 @@ func (c Cell) Open() bool {
 }
 
 func NewCell(s string) Cell {
-	c := Cell{B: map[Blizzard]bool{}}
+	c := Cell{exists: true, B: map[Blizzard]bool{}}
 	if s == "#" {
 		c.W = true
 		return c
@@ -140,8 +142,37 @@ type Grid struct {
 	minute int
 }
 
-func (g Grid) Print() {
-	fmt.Printf("Minute %d:\n", g.minute)
+func (g Grid) String() string {
+	return fmt.Sprintf("Grid %s @ minute %d", g.Key(), g.minute)
+}
+
+func (g Grid) Key() string {
+	s := ""
+	for row := 2; row < g.maxrow; row++ {
+		for col := 2; col < g.maxcol; col++ {
+			s += g.C(Pos{row, col}, NOW).String()
+		}
+	}
+	h := sha256.New()
+	h.Write([]byte(s))
+	return fmt.Sprintf("%x", h.Sum(nil))[:12]
+}
+
+// Returns a copy of this grid at the current minute (doesn't preserve past minutes)
+func (g Grid) Copy() Grid {
+	ng := Grid{maxrow: g.maxrow, maxcol: g.maxcol, minute: g.minute, c: map[Pos]map[int]Cell{}}
+	for p, mins := range g.c {
+		ng.c[p] = map[int]Cell{g.minute: mins[g.minute]}
+	}
+	return ng
+}
+
+func (g Grid) Prefix() string {
+	return "Grid " + g.Key() + ", "
+}
+
+func (g Grid) Print(prefix string, suffix string) {
+	fmt.Printf("%sminute %d: %s\n", prefix, g.minute, suffix)
 	for row := 1; row <= g.maxrow; row++ {
 		for col := 1; col <= g.maxcol; col++ {
 			fmt.Print(g.C(Pos{row, col}, NOW))
@@ -190,11 +221,11 @@ func (g *Grid) Inc() {
 	next := g.minute + 1
 	g.PrepMinute(next)
 
-	for row := 0; row <= g.maxrow; row++ {
-		for col := 0; col <= g.maxcol; col++ {
+	for row := 1; row <= g.maxrow; row++ {
+		for col := 1; col <= g.maxcol; col++ {
 			p := Pos{row, col}
 			c := g.C(p, NOW)
-			if c.W {
+			if !c.exists || c.W {
 				continue
 			}
 			for b, here := range c.B {
@@ -238,6 +269,32 @@ func (g *Grid) IncBlizzard(p Pos, b Blizzard) Pos {
 	return np
 }
 
+func (g *Grid) FindE(min int) Pos {
+	if min == NOW {
+		min = g.minute
+	}
+	for p, mins := range g.c {
+		if mins[min].E {
+			return p
+		}
+	}
+	log.Fatalf("Expedition has gone missing in minute %d", g.minute)
+	return Pos{}
+}
+
+// Returns possible positions for the expedition in this minute
+func (g *Grid) Moves() []Pos {
+	c := g.FindE(g.minute - 1)
+	rv := []Pos{}
+	for _, p := range []Pos{c, {c.row - 1, c.col}, {c.row + 1, c.col}, {c.row, c.col - 1}, {c.row, c.col + 1}} {
+		t := g.C(p, -1)
+		if t.exists && t.Open() {
+			rv = append(rv, p)
+		}
+	}
+	return rv
+}
+
 func NewGrid() Grid {
 	g := Grid{c: map[Pos]map[int]Cell{}}
 	g.maxrow = -1
@@ -248,7 +305,7 @@ func NewGrid() Grid {
 func main() {
 	s := bufio.NewScanner(os.Stdin)
 
-	g := NewGrid()
+	startGrid := NewGrid()
 
 	row := 1
 	for s.Scan() {
@@ -258,14 +315,63 @@ func main() {
 			if row == 1 && c.Open() {
 				c.E = true
 			}
-			g.SetC(p, NOW, c)
+			startGrid.SetC(p, NOW, c)
 		}
 		row++
 	}
+	exit := Pos{}
+	for c := 1; c <= startGrid.maxcol; c++ {
+		p := Pos{startGrid.maxrow, c}
+		if startGrid.C(p, NOW).Open() {
+			exit = p
+		}
+	}
+	if exit.row == 0 {
+		log.Fatal("Didn't find exit!")
+	}
+	startGrid.Print(startGrid.Prefix(), "")
+	fmt.Printf("Exit is at %s\n", exit)
 
-	g.Print()
-	for i := 0; i < 18; i++ {
+	q := []Grid{startGrid}
+	seen := map[string]bool{}
+	var best *Grid
+	for len(q) > 0 {
+		g := q[0]
+		q = q[1:]
+		if _, done := seen[g.Key()]; done {
+			fmt.Printf("Skipping %s - already done\n", g)
+			continue
+		}
+		if best != nil && g.minute > best.minute {
+			//fmt.Printf("Giving up on %s > best minute %d\n", g, best.minute)
+			continue
+		}
 		g.Inc()
-		g.Print()
+		moves := g.Moves()
+		fmt.Println(moves)
+		for _, m := range moves {
+			if m == exit {
+				fmt.Printf("Reached exit at minute %d!\n", g.minute)
+				if best == nil || best.minute > g.minute {
+					fmt.Println(" - and it's our new best!", g.minute)
+					best = &g
+				}
+				g.Print(g.Prefix(), "Exit to "+m.String())
+				continue
+			}
+			nextGrid := g.Copy()
+			nc := g.C(m, NOW)
+			nc.E = true
+			nextGrid.SetC(m, NOW, nc)
+			q = append(q, nextGrid)
+			nextGrid.Print(g.Prefix(), fmt.Sprintf("move to %s", m))
+		}
+		seen[g.Key()] = true
+	}
+
+	if best != nil {
+		fmt.Printf("Reached exit in %d minutes\n", best.minute)
+	} else {
+		log.Fatal("Did not reach the exit!")
 	}
 }
