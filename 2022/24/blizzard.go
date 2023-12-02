@@ -147,6 +147,10 @@ type Grid struct {
 	c              map[Pos]map[int]Cell
 	maxrow, maxcol int
 	epath          map[int]Pos
+	exit           Pos
+	eDist          int
+	bestDist       int
+	bestMinute     int
 
 	minute int
 }
@@ -170,14 +174,21 @@ func (g Grid) Key() string {
 // Returns a copy of this grid at the current minute (doesn't preserve past minutes)
 func (g Grid) Copy() Grid {
 	ng := Grid{
-		maxrow: g.maxrow,
-		maxcol: g.maxcol,
-		minute: g.minute,
-		c:      map[Pos]map[int]Cell{},
-		epath:  map[int]Pos{},
+		maxrow:     g.maxrow,
+		maxcol:     g.maxcol,
+		minute:     g.minute,
+		c:          map[Pos]map[int]Cell{},
+		epath:      map[int]Pos{},
+		exit:       g.exit,
+		eDist:      g.eDist,
+		bestDist:   g.bestDist,
+		bestMinute: g.bestMinute,
 	}
 	for p, mins := range g.c {
-		ng.c[p] = map[int]Cell{g.minute: mins[g.minute]}
+		ng.c[p] = map[int]Cell{}
+		for m, c := range mins {
+			ng.c[p][m] = c
+		}
 	}
 	for m, p := range g.epath {
 		ng.epath[m] = p
@@ -186,11 +197,11 @@ func (g Grid) Copy() Grid {
 }
 
 func (g Grid) Prefix() string {
-	return "Grid " + g.Key() + ", "
+	return fmt.Sprintf("Grid %s, minute %d", g.Key(), g.minute)
 }
 
 func (g Grid) Print(prefix string, suffix string) {
-	fmt.Printf("%sminute %d: %s\n", prefix, g.minute, suffix)
+	fmt.Printf("%s: %s\n", prefix, suffix)
 	for row := 1; row <= g.maxrow; row++ {
 		for col := 1; col <= g.maxcol; col++ {
 			fmt.Print(g.C(Pos{row, col}, NOW))
@@ -238,6 +249,11 @@ func (g *Grid) SetC(p Pos, min int, v Cell) {
 	g.maxcol = Max(g.maxcol, p.col)
 	if v.E && min >= len(g.epath) {
 		g.epath[min] = p
+		g.eDist = g.DistFrom(min, g.exit)
+		if g.eDist < g.bestDist {
+			g.bestDist = g.eDist
+			g.bestMinute = min
+		}
 	}
 }
 
@@ -317,7 +333,7 @@ func (g *Grid) FindE(min int) Pos {
 			return p
 		}
 	}
-	log.Fatalf("Expedition has gone missing in minute %d", g.minute)
+	log.Fatalf("%s Expedition has gone missing in minute %d", g.Prefix(), min)
 	return Pos{}
 }
 
@@ -339,6 +355,24 @@ func (g *Grid) Moves() []Pos {
 	return rv
 }
 
+func (g *Grid) Speed() float64 {
+	worst := 0
+	best := g.eDist
+	for m := g.minute; m > Max(0, g.minute-10); m-- {
+		d := g.DistFrom(m, g.exit)
+		if d < best {
+			best = d
+		}
+		if d > worst {
+			worst = d
+		}
+	}
+	if best < g.bestDist {
+		return 0.0
+	}
+	return float64(worst-best) / 10.0
+}
+
 func NewGrid() Grid {
 	g := Grid{c: map[Pos]map[int]Cell{}, epath: map[int]Pos{}}
 	g.maxrow = -1
@@ -348,8 +382,8 @@ func NewGrid() Grid {
 
 // A priority Queue entry.
 type PQE struct {
-	grid  Grid
-	speed float64
+	grid Grid
+	prio float64
 }
 
 // Priority Queue
@@ -362,21 +396,22 @@ type PQ struct {
 
 func (q *PQ) Add(g Grid) PQE {
 	qe := PQE{grid: g}
-	qe.speed = float64(g.DistFrom(NOW, q.start)) / float64(g.minute)
+	dist := float64(g.DistFrom(NOW, q.start))
+	qe.prio = dist + g.Speed()
 	if q.lastSpeeds == nil {
 		q.lastSpeeds = make([]float64, 10)
 	}
-	q.lastSpeeds = append(q.lastSpeeds[1:], qe.speed)
+	q.lastSpeeds = append(q.lastSpeeds[1:], qe.prio)
 	if len(q.Q) == 0 {
 		q.Q = append(q.Q, qe)
 		return qe
 	}
-	if qe.speed > q.Q[0].speed {
+	if qe.prio > q.Q[0].prio {
 		q.Q = append([]PQE{qe}, q.Q...)
 		return qe
 	}
 	for n, t := range q.Q {
-		if qe.speed > t.speed {
+		if qe.prio > t.prio {
 			q.Q = append(q.Q[:n+1], q.Q[n:]...)
 			q.Q[n] = qe
 			return qe
@@ -429,42 +464,60 @@ func main() {
 	}
 	startGrid.Print(startGrid.Prefix(), "")
 	start := startGrid.FindE(NOW)
+	exitDist := startGrid.DistFrom(NOW, exit)
 	fmt.Printf("Expedition is at %s\n", start)
-	fmt.Printf("Exit is at %s, %d away\n\n", exit, startGrid.DistFrom(NOW, exit))
+	fmt.Printf("Exit is at %s, %d away\n\n", exit, exitDist)
+
+	startGrid.exit = exit
+	startGrid.bestDist = exitDist
+	startGrid.bestMinute = 0
 
 	q := PQ{start: start}
 	q.Add(startGrid)
 	seen := map[string]bool{}
 	var best *Grid
-	var maxDist int
+	bestDist := exitDist
 	for len(q.Q) > 0 {
 		qe := q.Pop()
 		g := qe.grid
 		k := g.Key()
 		if _, done := seen[k]; done {
-			//fmt.Printf("Skipping %s - already done\n", g)
+			fmt.Printf("Skipping %s - already done\n", g)
 			continue
 		}
 		prefix := g.Prefix()
 		seen[k] = true
-		if best != nil && g.minute > best.minute {
-			fmt.Printf("%sGiving up on > best minute %d\n", prefix, best.minute)
-			continue
+		if best != nil {
+			fastest := g.minute + g.eDist
+			if g.minute > best.minute {
+				fmt.Printf("%s Giving up > best minute %d\n", prefix, best.minute)
+				continue
+			} else if fastest > best.minute {
+				fmt.Printf("%s Giving up, best possible exit at @%d > %d\n", prefix, fastest, best.minute)
+				continue
+			}
 		}
-		dist := g.DistFrom(NOW, start)
-		if dist > maxDist {
-			fmt.Printf("%sNew max distance of %d\n", prefix, dist)
-			maxDist = dist
-		} else if dist < maxDist/2 {
+		if g.bestDist < bestDist {
+			bestDist = g.bestDist
+		} else if g.eDist > int(float64(bestDist)*0.50) {
 			//g.Print(prefix, "Giving up - not making progress")
-			continue
+			fmt.Println(prefix, "Giving up - not making progress")
+			//continue
+		} else if g.eDist > g.bestDist && (g.minute-g.bestMinute) > (g.eDist-g.bestDist) {
+			fmt.Printf("%s Giving up, gone off the rails (%d@%d vs %d@%d)\n", prefix,
+				g.eDist, g.minute, g.bestDist, g.bestMinute)
+			//continue
 		}
-		if qe.speed < q.AvgSpeed()/2 {
-			g.Print(prefix, "Giving up, slow")
-			continue
+		avg := q.AvgSpeed()
+		if qe.prio < avg/2 {
+			//g.Print(prefix, "Giving up, slow")
+			fmt.Println(prefix, "Giving up, slow")
+			//continue
 		}
-		fmt.Println(prefix, fmt.Sprintf("spd=%.2f", qe.speed), g.Path(15))
+		fmt.Println(prefix, fmt.Sprintf("dist=%d, best=%d, spd=%.2f (avg %.2f)",
+			g.eDist, g.bestDist, qe.prio, avg), g.Path(15))
 		at := g.FindE(NOW)
+		fmt.Println(at)
 		g.Inc()
 		moves := g.Moves()
 		for _, m := range moves {
@@ -482,10 +535,12 @@ func main() {
 			nc.E = true
 			nextGrid.SetC(m, NOW, nc)
 			qe := q.Add(nextGrid)
-			//nextGrid.Print(prefix, fmt.Sprintf("%s move to %s  (%s), ql=%d", at, m, nextGrid.Key(), len(q)))
+			//nextGrid.Print(prefix,
+			//	fmt.Sprintf("%s move to %s  (%s), ql=%d", at, m,
+			//		nextGrid.Key(), len(q.Q)))
 			fmt.Println(prefix,
 				fmt.Sprintf("%s move to %s (%s, spd=%.2f), ql=%d",
-					at, m, nextGrid.Key(), qe.speed, len(q.Q)))
+					at, m, nextGrid.Key(), qe.prio, len(q.Q)))
 		}
 	}
 
