@@ -34,10 +34,19 @@ func (c Cell) String() string {
 	return fmt.Sprintf("%s", c.id)
 }
 
+func (c Cell) NumberStarts() (v int, hasSymbol bool) {
+	if c.Prev != nil {
+		return -1, false
+	}
+	return c.Number()
+}
 
 func (c Cell) Number() (v int, hasSymbol bool) {
-	if c.Value == -1 || c.Symbol != 0 || c.Prev != nil {
+	if c.Value == -1 || c.Symbol != 0 {
 		return -1, false
+	}
+	if c.Prev != nil {
+		return c.Prev.Number()
 	}
 	v, _, hasSymbol = c.getDigit()
 	return
@@ -73,6 +82,28 @@ func (c Cell) hasSymbol() bool {
 		}
 	}
 	return false
+}
+
+func (c Cell) Numbers() (rv []int) {
+	touches := map[int]bool{}
+	for _, rD := range []int{-1, 0, 1} {
+		for _, cD := range []int{-1, 0, 1} {
+			if rD == 0 && cD == 0 {
+				continue
+			}
+			oCell := c.grid.Cell(Pos{c.id.row + rD, c.id.col + cD})
+			if oCell == nil {
+				continue
+			}
+			if n, _ := oCell.Number(); n != -1 {
+				touches[n] = true
+			}
+		}
+	}
+	for n, _ := range touches {
+		rv = append(rv, n)
+	}
+	return
 }
 
 type Grid struct {
@@ -125,9 +156,23 @@ func (g *Grid) Print() {
 func (g *Grid) FindPartNumbers() (rv []int) {
 	for _, cols := range g.cells {
 		for _, cell := range cols {
-			if n, hasSymbol := cell.Number(); n != -1 && hasSymbol {
+			if n, hasSymbol := cell.NumberStarts(); n != -1 && hasSymbol {
 				log.Printf("%s: %d", cell, n)
 				rv = append(rv, n)
+			}
+		}
+	}
+	return
+}
+
+func (g *Grid) FindGearRatios() (rv []int) {
+	for _, cols := range g.cells {
+		for _, cell := range cols {
+			if cell.Symbol == '*' {
+				n := cell.Numbers()
+				if len(n) == 2 {
+					rv = append(rv, n[0]*n[1])
+				}
 			}
 		}
 	}
