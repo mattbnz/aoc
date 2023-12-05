@@ -42,11 +42,12 @@ func (m Mapping) String() string {
 	return fmt.Sprintf("%s-to-%s map: %d overrides", m.Source, m.Dest, len(m.Overrides))
 }
 
-func (m Mapping) Map(id int, max int) (int, Override) {
+func (m *Mapping) Map(id int, max int) (int, Override) {
 	if !m.sorted {
 		sort.Slice(m.Overrides, func(i, j int) bool {
 			return m.Overrides[i].SourceBase < m.Overrides[j].SourceBase
 		})
+		m.sorted = true
 	}
 	lastEnd := 0
 	for _, o := range m.Overrides {
