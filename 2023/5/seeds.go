@@ -14,24 +14,72 @@ import (
 	"strings"
 )
 
+type cacheKey struct {
+	source     string
+	dest       string
+	sourceBase int
+	count      int
+}
+
 type Mapping struct {
 	Source string
 	Dest   string
 
 	Overrides []*Override
+
+	Cache     map[cacheKey]Override
+	hit, miss int
+
+	sorted bool
 }
 
 func (m Mapping) String() string {
 	return fmt.Sprintf("%s-to-%s map: %d overrides", m.Source, m.Dest, len(m.Overrides))
 }
 
-func (m Mapping) Map(id int) int {
-	for _, o := range m.Overrides {
-		if n := o.Contains(id); n != -1 {
-			return o.DestBase + n
-		}
+func (m Mapping) Map(id int, max int) (int, Override) {
+	if !m.sorted {
+		sort.Slice(m.Overrides, func(i, j int) bool {
+			return m.Overrides[i].SourceBase < m.Overrides[j].SourceBase
+		})
 	}
-	return id
+	lastEnd := 0
+	for _, o := range m.Overrides {
+		if o.SourceBase > id {
+			// Wasn't in previous override, not in this one, fake up a gap override
+			return id, Override{SourceBase: lastEnd, DestBase: lastEnd, Count: o.SourceBase - lastEnd}
+		}
+		if d := o.ToDest(id); d != -1 {
+			return d, *o
+		}
+		lastEnd = o.SourceBase + o.Count
+	}
+	// Bigger than any override
+	return id, Override{SourceBase: lastEnd, DestBase: lastEnd, Count: max - lastEnd}
+}
+
+func (m *Mapping) FromCache(dest string, id int) (rv int, bounds Override, found bool) {
+	for k, o := range m.Cache {
+		if k.dest != dest {
+			continue
+		}
+		if id < k.sourceBase || id >= k.sourceBase+k.count {
+			continue
+		}
+		m.hit++
+		return o.DestBase + (id - k.sourceBase), o, true
+	}
+	m.miss++
+	return -1, Override{}, false
+}
+
+func (m *Mapping) PutCache(dest string, o Override, sourceID, destID int) {
+	if m.Cache == nil {
+		m.Cache = map[cacheKey]Override{}
+	}
+	key := cacheKey{source: m.Source, dest: dest, sourceBase: o.SourceBase, count: o.Count}
+	m.Cache[key] = o
+	log.Printf("Cache Add: %#v => %#v", key, o)
 }
 
 type Override struct {
@@ -40,17 +88,26 @@ type Override struct {
 	Count      int
 }
 
-func (o Override) Contains(id int) int {
-	if id >= o.SourceBase && id < o.SourceBase+o.Count {
-		return id - o.SourceBase
+func (o Override) ToSource(dest int) int {
+	if dest < o.DestBase || dest >= o.DestBase+o.Count {
+		return -1
 	}
-	return -1
+	return o.SourceBase + (dest - o.DestBase)
+}
+
+func (o Override) ToDest(source int) int {
+	if source < o.SourceBase || source >= o.SourceBase+o.Count {
+		return -1
+	}
+	return o.DestBase + (source - o.SourceBase)
 }
 
 type Almanac struct {
 	Seeds []int
 
 	Maps []*Mapping
+
+	Max int // biggest thing we see during parsing.
 }
 
 func NewAlmanac(filename string) (a Almanac, err error) {
@@ -68,6 +125,9 @@ func NewAlmanac(filename string) (a Almanac, err error) {
 	a.Seeds = numberList(seeds)
 	if !ok || len(a.Seeds) < 1 {
 		return a, fmt.Errorf("implausible seed count: %#v", a.Seeds)
+	}
+	for n := 0; n < len(a.Seeds); n += 2 {
+		a.Max = Max(a.Max, a.Seeds[n]+a.Seeds[n+1])
 	}
 	if !s.Scan() {
 		return a, fmt.Errorf("missing blank line following seeds")
@@ -106,6 +166,7 @@ func NewAlmanac(filename string) (a Almanac, err error) {
 			return a, fmt.Errorf("bad map line: %s", l)
 		}
 		currentMap.Overrides = append(currentMap.Overrides, &Override{DestBase: nums[0], SourceBase: nums[1], Count: nums[2]})
+		a.Max = Max(a.Max, nums[0]+nums[2], nums[1]+nums[2])
 	}
 	if currentMap != nil {
 		a.Maps = append(a.Maps, currentMap)
@@ -127,17 +188,60 @@ func (a *Almanac) Lookup(source string, id int, dest string) int {
 	if m == nil {
 		log.Fatalf("unknown category: %s", source)
 	}
-	d := m.Map(id)
+	d, _ := m.Map(id, a.Max)
 	if m.Dest == dest {
 		return d
 	}
 	return a.Lookup(m.Dest, d, dest)
 }
 
+func (a *Almanac) BoundedLookup(source string, id int, dest string) (int, Override) {
+	//log.Printf("BoundedLookup (%s,%d,%s)", source, id, dest)
+	m := a.getMap(source)
+	if m == nil {
+		log.Fatalf("unknown category: %s", source)
+	}
+	if source == "seed" && (m.hit+m.miss)%100000 == 0 {
+		log.Printf("cache has %d/%d hits %.2f%%", m.hit, m.hit+m.miss, float64(m.hit)/float64(m.hit+m.miss)*100.0)
+	}
+	if d, b, found := m.FromCache(dest, id); found {
+		return d, b
+	}
+	d, b := m.Map(id, a.Max)
+	if m.Dest == dest {
+		//log.Printf(" => (%s,%d) (%#v)", dest, d, b)
+		return d, b
+	}
+	d2, b2 := a.BoundedLookup(m.Dest, d, dest)
+	final := b
+	final.SourceBase = Max(b.SourceBase, b.ToSource(b2.SourceBase))
+	trimmedBase := final.SourceBase - b.SourceBase
+	final.DestBase += trimmedBase
+	final.Count = Min(b.Count-trimmedBase, (b2.SourceBase+b2.Count)-final.DestBase)
+	m.PutCache(dest, final, id, d2)
+	//log.Printf(" (%#v) => (%s,%d) (%#v) => (%s,%d) (%#v)",
+	//	b, m.Dest, d, b2, dest, d2, final)
+	return d2, final
+}
+
 func (a *Almanac) BestLocation() int {
 	locs := []int{}
 	for _, s := range a.Seeds {
 		locs = append(locs, a.Lookup("seed", s, "location"))
+	}
+	sort.Ints(locs)
+	return locs[0]
+}
+
+func (a *Almanac) BestLocation2() int {
+	locs := []int{}
+	for n := 0; n < len(a.Seeds); n += 2 {
+		seed, count := a.Seeds[n], a.Seeds[n+1]
+		for c := 0; c < count; c++ {
+			l, b := a.BoundedLookup("seed", seed+c, "location")
+			locs = append(locs, l)
+			c += b.Count
+		}
 	}
 	sort.Ints(locs)
 	return locs[0]

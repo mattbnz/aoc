@@ -20,3 +20,23 @@ func numberList(list string) (rv []int) {
 	}
 	return
 }
+
+func Max(a int, b ...int) (rv int) {
+	rv = a
+	for _, t := range b {
+		if t > rv {
+			rv = t
+		}
+	}
+	return
+}
+
+func Min(a int, b ...int) (rv int) {
+	rv = a
+	for _, t := range b {
+		if t < rv {
+			rv = t
+		}
+	}
+	return
+}
