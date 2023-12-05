@@ -117,6 +117,8 @@ func Test_Sample(t *testing.T) {
 		99: 51,
 	} {
 		assert.Equal(t, soil, almanac.Lookup("seed", seed, "soil"))
+		l, _ := almanac.BoundedLookup("seed", seed, "soil")
+		assert.Equal(t, soil, l, "BoundedLookup wrong for seed %d", seed)
 	}
 	for seed, location := range map[int]int{
 		79: 82,
@@ -125,6 +127,8 @@ func Test_Sample(t *testing.T) {
 		13: 35,
 	} {
 		assert.Equal(t, location, almanac.Lookup("seed", seed, "location"))
+		l, _ := almanac.BoundedLookup("seed", seed, "location")
+		assert.Equal(t, location, l, "BoundedLookup wrong for seed %d", seed)
 	}
 	assert.Equal(t, 35, almanac.BestLocation())
 	assert.Equal(t, 46, almanac.BestLocation2())

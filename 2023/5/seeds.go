@@ -21,6 +21,10 @@ type cacheKey struct {
 	sourceBase int
 	count      int
 }
+type cacheResult struct {
+	override Override
+	diff     int
+}
 
 type Mapping struct {
 	Source string
@@ -28,7 +32,7 @@ type Mapping struct {
 
 	Overrides []*Override
 
-	Cache     map[cacheKey]Override
+	Cache     map[cacheKey]cacheResult
 	hit, miss int
 
 	sorted bool
@@ -68,7 +72,7 @@ func (m *Mapping) FromCache(dest string, id int) (rv int, bounds Override, found
 			continue
 		}
 		m.hit++
-		return o.DestBase + (id - k.sourceBase), o, true
+		return id + o.diff, o.override, true
 	}
 	m.miss++
 	return -1, Override{}, false
@@ -76,10 +80,10 @@ func (m *Mapping) FromCache(dest string, id int) (rv int, bounds Override, found
 
 func (m *Mapping) PutCache(dest string, o Override, sourceID, destID int) {
 	if m.Cache == nil {
-		m.Cache = map[cacheKey]Override{}
+		m.Cache = map[cacheKey]cacheResult{}
 	}
 	key := cacheKey{source: m.Source, dest: dest, sourceBase: o.SourceBase, count: o.Count}
-	m.Cache[key] = o
+	m.Cache[key] = cacheResult{override: o, diff: destID - sourceID}
 	glog.V(1).Infof("Cache Add: %#v => %#v", key, o)
 }
 
