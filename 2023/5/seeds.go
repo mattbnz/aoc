@@ -248,7 +248,7 @@ func (a *Almanac) BestLocation2() int {
 			l, b := a.BoundedLookup("seed", seed+c, "location")
 			glog.Infof("%d: Seed %d (%d+%d) goes to %d (%#v)", n, seed+c, seed, c, l, b)
 			locs = append(locs, l)
-			c += b.Count
+			c += (b.SourceBase + b.Count) - seed - 1
 		}
 	}
 	sort.Ints(locs)

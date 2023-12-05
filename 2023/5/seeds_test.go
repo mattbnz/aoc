@@ -144,7 +144,7 @@ func Test_Part2(t *testing.T) {
 	require.NoError(t, err)
 
 	best := almanac.BestLocation2()
-	assert.NotEqual(t, 53266420, best, "guess 1")
+	assert.Less(t, best, 53266420, "guess 1")
 
 	log.Printf("Best Location for all seeds is: %d", best)
 }
