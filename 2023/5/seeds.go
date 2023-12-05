@@ -8,10 +8,11 @@ package day5
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/golang/glog"
 )
 
 type cacheKey struct {
@@ -79,7 +80,7 @@ func (m *Mapping) PutCache(dest string, o Override, sourceID, destID int) {
 	}
 	key := cacheKey{source: m.Source, dest: dest, sourceBase: o.SourceBase, count: o.Count}
 	m.Cache[key] = o
-	log.Printf("Cache Add: %#v => %#v", key, o)
+	glog.V(1).Infof("Cache Add: %#v => %#v", key, o)
 }
 
 type Override struct {
@@ -186,7 +187,7 @@ func (a *Almanac) getMap(source string) *Mapping {
 func (a *Almanac) Lookup(source string, id int, dest string) int {
 	m := a.getMap(source)
 	if m == nil {
-		log.Fatalf("unknown category: %s", source)
+		glog.Fatalf("unknown category: %s", source)
 	}
 	d, _ := m.Map(id, a.Max)
 	if m.Dest == dest {
@@ -196,20 +197,21 @@ func (a *Almanac) Lookup(source string, id int, dest string) int {
 }
 
 func (a *Almanac) BoundedLookup(source string, id int, dest string) (int, Override) {
-	//log.Printf("BoundedLookup (%s,%d,%s)", source, id, dest)
+	callPrefix := fmt.Sprintf("BoundedLookup (%s,%d,%s) =>", source, id, dest)
 	m := a.getMap(source)
 	if m == nil {
-		log.Fatalf("unknown category: %s", source)
+		glog.Fatalf("unknown category: %s", source)
 	}
-	if source == "seed" && (m.hit+m.miss)%100000 == 0 {
-		log.Printf("cache has %d/%d hits %.2f%%", m.hit, m.hit+m.miss, float64(m.hit)/float64(m.hit+m.miss)*100.0)
+	if source == "seed" && (m.hit+m.miss) > 0 && (m.hit+m.miss)%100000 == 0 {
+		glog.V(2).Infof("cache has %d/%d hits %.2f%%", m.hit, m.hit+m.miss, float64(m.hit)/float64(m.hit+m.miss)*100.0)
 	}
 	if d, b, found := m.FromCache(dest, id); found {
+		glog.V(1).Infof("%s (%s,%d) (%#v) (from cache)", callPrefix, dest, d, b)
 		return d, b
 	}
 	d, b := m.Map(id, a.Max)
 	if m.Dest == dest {
-		//log.Printf(" => (%s,%d) (%#v)", dest, d, b)
+		glog.V(1).Infof("%s (%s,%d) (%#v)", callPrefix, dest, d, b)
 		return d, b
 	}
 	d2, b2 := a.BoundedLookup(m.Dest, d, dest)
@@ -219,8 +221,8 @@ func (a *Almanac) BoundedLookup(source string, id int, dest string) (int, Overri
 	final.DestBase += trimmedBase
 	final.Count = Min(b.Count-trimmedBase, (b2.SourceBase+b2.Count)-final.DestBase)
 	m.PutCache(dest, final, id, d2)
-	//log.Printf(" (%#v) => (%s,%d) (%#v) => (%s,%d) (%#v)",
-	//	b, m.Dest, d, b2, dest, d2, final)
+	glog.V(1).Infof("%s (%s,%d) (%#v); (%#v) => (%s,%d) (%#v)",
+		callPrefix, dest, d2, final, b, m.Dest, d, b2)
 	return d2, final
 }
 
@@ -239,6 +241,7 @@ func (a *Almanac) BestLocation2() int {
 		seed, count := a.Seeds[n], a.Seeds[n+1]
 		for c := 0; c < count; c++ {
 			l, b := a.BoundedLookup("seed", seed+c, "location")
+			glog.Infof("%d: Seed %d (%d+%d) goes to %d (%#v)", n, seed+c, seed, c, l, b)
 			locs = append(locs, l)
 			c += b.Count
 		}
