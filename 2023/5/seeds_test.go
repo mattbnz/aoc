@@ -148,3 +148,9 @@ func Test_Part2(t *testing.T) {
 
 	log.Printf("Best Location for all seeds is: %d", best)
 }
+
+func Test_Test(t *testing.T) {
+	almanac, err := NewAlmanac("sample")
+	require.NoError(t, err)
+	assert.Equal(t, 46, almanac.BestLocation2())
+}
