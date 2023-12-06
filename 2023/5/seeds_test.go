@@ -104,6 +104,8 @@ func Test_Sample(t *testing.T) {
 	almanac, err := NewAlmanac("sample")
 	require.NoError(t, err)
 	assert.Equal(t, 100, almanac.Max)
+	assert.Equal(t, 35, almanac.BestLocation())
+	assert.Equal(t, 46, almanac.BestLocation2())
 	for seed, soil := range map[int]int{
 		0:  0,
 		1:  1,
@@ -125,13 +127,12 @@ func Test_Sample(t *testing.T) {
 		14: 43,
 		55: 86,
 		13: 35,
+		82: 46,
 	} {
 		assert.Equal(t, location, almanac.Lookup("seed", seed, "location"))
 		l, _ := almanac.BoundedLookup("seed", seed, "location")
 		assert.Equal(t, location, l, "BoundedLookup wrong for seed %d", seed)
 	}
-	assert.Equal(t, 35, almanac.BestLocation())
-	assert.Equal(t, 46, almanac.BestLocation2())
 }
 
 func Test_Part1(t *testing.T) {
@@ -139,6 +140,7 @@ func Test_Part1(t *testing.T) {
 	require.NoError(t, err)
 	log.Printf("Best Location is: %d", almanac.BestLocation())
 }
+
 func Test_Part2(t *testing.T) {
 	almanac, err := NewAlmanac("input")
 	require.NoError(t, err)
@@ -150,7 +152,20 @@ func Test_Part2(t *testing.T) {
 }
 
 func Test_Test(t *testing.T) {
-	almanac, err := NewAlmanac("sample")
+	almanac, err := NewAlmanac("test")
 	require.NoError(t, err)
-	assert.Equal(t, 46, almanac.BestLocation2())
+
+	for seed, location := range map[int]int{
+		5:  5,
+		15: 15,
+		25: 25,
+		94: 25,
+		95: 24,
+		96: 26,
+	} {
+		assert.Equal(t, location, almanac.Lookup("seed", seed, "location"))
+		l, _ := almanac.BoundedLookup("seed", seed, "location")
+		assert.Equal(t, location, l, "BoundedLookup wrong for seed %d", seed)
+	}
+
 }

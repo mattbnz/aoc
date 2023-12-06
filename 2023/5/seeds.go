@@ -85,7 +85,7 @@ func (m *Mapping) PutCache(dest string, o Override, sourceID, destID int) {
 	}
 	key := cacheKey{source: m.Source, dest: dest, sourceBase: o.SourceBase, count: o.Count}
 	m.Cache[key] = cacheResult{override: o, diff: destID - sourceID}
-	glog.V(1).Infof("Cache Add: %#v => %#v", key, o)
+	glog.V(1).Infof("Cache Add: %#v => %#v", key, m.Cache[key])
 }
 
 type Override struct {
@@ -246,7 +246,7 @@ func (a *Almanac) BestLocation2() int {
 		seed, count := a.Seeds[n], a.Seeds[n+1]
 		for c := 0; c < count; c++ {
 			l, b := a.BoundedLookup("seed", seed+c, "location")
-			glog.Infof("%d: Seed %d (%d+%d) goes to %d (%#v)", n, seed+c, seed, c, l, b)
+			glog.Infof("% 3d: Seed % 12d (% 12d +% 12d)\tgoes to % 12d\t(%#v)", n, seed+c, seed, c, l, b)
 			locs = append(locs, l)
 			c += (b.SourceBase + b.Count) - seed - 1
 		}
