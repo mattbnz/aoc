@@ -246,9 +246,11 @@ func (a *Almanac) BestLocation2() int {
 		seed, count := a.Seeds[n], a.Seeds[n+1]
 		for c := 0; c < count; c++ {
 			l, b := a.BoundedLookup("seed", seed+c, "location")
-			glog.Infof("% 3d: Seed % 12d (% 12d +% 12d)\tgoes to % 12d\t(%#v)", n, seed+c, seed, c, l, b)
+			glog.Infof("% 3d: Seed % 12d (% 12d +% 12d)\tgoes to % 12d", n, seed+c, seed, c, l)
 			locs = append(locs, l)
-			c += (b.SourceBase + b.Count) - seed - 1
+			c += (b.SourceBase + b.Count)
+			glog.V(2).Infof("      - jumping search to seed %d from %#v", c, b)
+			c -= seed + 1 // for base seed and loop increment itself.
 		}
 	}
 	sort.Ints(locs)
