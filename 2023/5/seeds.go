@@ -35,14 +35,17 @@ type Mapping struct {
 	Cache     map[cacheKey]cacheResult
 	hit, miss int
 
-	sorted bool
+	sorted     bool
+	sortedDest bool
+	oLByDest   []*Override
 }
 
 func (m Mapping) String() string {
 	return fmt.Sprintf("%s-to-%s map: %d overrides", m.Source, m.Dest, len(m.Overrides))
 }
 
-func (m *Mapping) Map(id int, max int) (int, Override) {
+// Returns the destination id for the given source id
+func (m *Mapping) ToDest(id int, max int) (int, Override) {
 	if !m.sorted {
 		sort.Slice(m.Overrides, func(i, j int) bool {
 			return m.Overrides[i].SourceBase < m.Overrides[j].SourceBase
@@ -59,6 +62,30 @@ func (m *Mapping) Map(id int, max int) (int, Override) {
 			return d, *o
 		}
 		lastEnd = o.SourceBase + o.Count
+	}
+	// Bigger than any override
+	return id, Override{SourceBase: lastEnd, DestBase: lastEnd, Count: max - lastEnd}
+}
+
+// Returns the source id for the given destination id
+func (m *Mapping) ToSource(id int, max int) (int, Override) {
+	if !m.sortedDest {
+		m.oLByDest = append(m.oLByDest, m.Overrides...)
+		sort.Slice(m.oLByDest, func(i, j int) bool {
+			return m.oLByDest[i].DestBase < m.oLByDest[j].DestBase
+		})
+		m.sortedDest = true
+	}
+	lastEnd := 0
+	for _, o := range m.oLByDest {
+		if o.DestBase > id {
+			// Wasn't in previous override, not in this one, fake up a gap override
+			return id, Override{SourceBase: lastEnd, DestBase: lastEnd, Count: o.DestBase - lastEnd}
+		}
+		if d := o.ToSource(id); d != -1 {
+			return d, *o
+		}
+		lastEnd = o.DestBase + o.Count
 	}
 	// Bigger than any override
 	return id, Override{SourceBase: lastEnd, DestBase: lastEnd, Count: max - lastEnd}
@@ -189,12 +216,21 @@ func (a *Almanac) getMap(source string) *Mapping {
 	return nil
 }
 
+func (a *Almanac) getDestMap(dest string) *Mapping {
+	for _, m := range a.Maps {
+		if m.Dest == dest {
+			return m
+		}
+	}
+	return nil
+}
+
 func (a *Almanac) Lookup(source string, id int, dest string) int {
 	m := a.getMap(source)
 	if m == nil {
 		glog.Fatalf("unknown category: %s", source)
 	}
-	d, _ := m.Map(id, a.Max)
+	d, _ := m.ToDest(id, a.Max)
 	if m.Dest == dest {
 		return d
 	}
@@ -214,7 +250,7 @@ func (a *Almanac) BoundedLookup(source string, id int, dest string) (int, Overri
 		glog.V(1).Infof("%s (%s,%d) (%#v) (from cache)", callPrefix, dest, d, b)
 		return d, b
 	}
-	d, b := m.Map(id, a.Max)
+	d, b := m.ToDest(id, a.Max)
 	if m.Dest == dest {
 		glog.V(1).Infof("%s (%s,%d) (%#v)", callPrefix, dest, d, b)
 		return d, b
@@ -255,4 +291,59 @@ func (a *Almanac) BestLocation2() int {
 	}
 	sort.Ints(locs)
 	return locs[0]
+}
+
+// Returns the first (lowest) seed within bounds that exists in the starting seed list, along with
+// it's offset from the base of bounds.
+func (a *Almanac) LowestStart(bounds Override) (startSeed int, startOffset int) {
+	return -1, -1 // TODO
+}
+
+func (a *Almanac) LookupSource(source string, destID int, dest string) (int, Override) {
+	callPrefix := fmt.Sprintf("ReverseLookup (%s,%d,%s) =>", source, destID, dest)
+	m := a.getDestMap(dest)
+	if m == nil {
+		glog.Fatalf("unknown category: %s", dest)
+	}
+	s, b := m.ToSource(destID, a.Max)
+	if m.Source == source {
+		glog.V(1).Infof("%s (%s,%d) (%#v)", callPrefix, source, s, b)
+		return s, b
+	}
+	s2, b2 := a.LookupSource(source, s, m.Source)
+	final := b
+	final.DestBase = Max(b.DestBase, b.ToDest(b2.DestBase))
+	trimmedBase := final.DestBase - b.DestBase
+	final.SourceBase += trimmedBase
+	final.Count = Min(b.Count-trimmedBase, (b2.SourceBase+b2.Count)-final.SourceBase)
+
+	/*
+		final.SourceBase = Max(b.SourceBase, b.ToSource(b2.SourceBase))
+		trimmedBase := final.SourceBase - b.SourceBase
+		final.DestBase += trimmedBase
+		final.Count = Min(b.Count-trimmedBase, (b2.SourceBase+b2.Count)-final.DestBase)
+	*/
+	//m.PutCache(dest, final, id, s2)
+	glog.V(1).Infof("%s (%s,%d) (%#v); (%#v) => (%s,%d) (%#v)",
+		callPrefix, source, s2, final, b, m.Source, s, b2)
+	return s2, final
+}
+
+func (a *Almanac) BestLocation2b() int {
+	m := a.getMap("humidity")
+	if m == nil {
+		glog.Fatalf("can't find humidity map")
+	}
+
+	for loc := 0; loc < a.Max; loc++ {
+		seed, b := a.LookupSource("seed", loc, "location")
+		glog.Infof("Location % 12d maps to seed % 12d with bounds %#v", loc, seed, b)
+		if startSeed, startOffset := a.LowestStart(b); startSeed != -1 {
+			glog.Infof(" + Bounds contain starting seed % 12d at offset % 12d!", startSeed, startOffset)
+			return loc + startOffset
+		}
+
+	}
+	glog.Fatalf("Did not find any location that mapped to a starting seed!")
+	return -1
 }

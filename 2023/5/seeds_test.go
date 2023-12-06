@@ -29,13 +29,22 @@ func Test_Map(t *testing.T) {
 	m := Mapping{
 		Overrides: []*Override{o},
 	}
-	v, _ := m.Map(97, 100)
+	v, _ := m.ToDest(97, 100)
 	assert.Equal(t, 97, v)
-	v, _ = m.Map(98, 100)
+	v, _ = m.ToDest(98, 100)
 	assert.Equal(t, 50, v)
-	v, _ = m.Map(99, 100)
+	v, _ = m.ToDest(99, 100)
 	assert.Equal(t, 51, v)
-	v, _ = m.Map(100, 100)
+	v, _ = m.ToDest(100, 100)
+	assert.Equal(t, 100, v)
+
+	v, _ = m.ToSource(97, 100)
+	assert.Equal(t, 97, v)
+	v, _ = m.ToSource(50, 100)
+	assert.Equal(t, 98, v)
+	v, _ = m.ToSource(51, 100)
+	assert.Equal(t, 99, v)
+	v, _ = m.ToSource(100, 100)
 	assert.Equal(t, 100, v)
 }
 
@@ -43,25 +52,25 @@ func Test_MapBounds(t *testing.T) {
 	almanac, err := NewAlmanac("sample")
 	require.NoError(t, err)
 	m := almanac.getMap("seed")
-	v, b := m.Map(0, 100)
+	v, b := m.ToDest(0, 100)
 	assert.Equal(t, 0, v)
 	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 50}, b)
-	v, b = m.Map(49, 100)
+	v, b = m.ToDest(49, 100)
 	assert.Equal(t, 49, v)
 	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 50}, b)
-	v, b = m.Map(50, 100)
+	v, b = m.ToDest(50, 100)
 	assert.Equal(t, 52, v)
 	assert.Equal(t, Override{SourceBase: 50, DestBase: 52, Count: 48}, b)
-	v, b = m.Map(97, 100)
+	v, b = m.ToDest(97, 100)
 	assert.Equal(t, 99, v)
 	assert.Equal(t, Override{SourceBase: 50, DestBase: 52, Count: 48}, b)
-	v, b = m.Map(98, 100)
+	v, b = m.ToDest(98, 100)
 	assert.Equal(t, 50, v)
 	assert.Equal(t, Override{SourceBase: 98, DestBase: 50, Count: 2}, b)
-	v, b = m.Map(99, 100)
+	v, b = m.ToDest(99, 100)
 	assert.Equal(t, 51, v)
 	assert.Equal(t, Override{SourceBase: 98, DestBase: 50, Count: 2}, b)
-	v, b = m.Map(100, 100)
+	v, b = m.ToDest(100, 100)
 	assert.Equal(t, 100, v)
 	assert.Equal(t, Override{SourceBase: 100, DestBase: 100, Count: 0}, b)
 }
@@ -100,12 +109,47 @@ func Test_BoundedLookup(t *testing.T) {
 	assert.Equal(t, Override{SourceBase: 71, DestBase: 73, Count: 11}, b)
 }
 
+func Test_ReverseLookup(t *testing.T) {
+	almanac, err := NewAlmanac("sample")
+	require.NoError(t, err)
+
+	// https://docs.google.com/spreadsheets/d/1NZkrEvOFNTz-vwKHRL2aP34UEeK0YWwgIurKgChdnIA/edit#gid=1157275920
+	d, b := almanac.LookupSource("humidity", 0, "location")
+	assert.Equal(t, 0, d)
+	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 56}, b)
+
+	d, b = almanac.LookupSource("temperature", 0, "location")
+	assert.Equal(t, 69, d)
+	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 1}, b)
+
+	d, b = almanac.LookupSource("light", 0, "location")
+	assert.Equal(t, 65, d)
+	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 1}, b)
+
+	d, b = almanac.LookupSource("water", 0, "location")
+	assert.Equal(t, 72, d)
+	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 1}, b)
+
+	d, b = almanac.LookupSource("fertilizer", 0, "location")
+	assert.Equal(t, 72, d)
+	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 1}, b)
+
+	d, b = almanac.LookupSource("soil", 0, "location")
+	assert.Equal(t, 72, d)
+	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 1}, b)
+
+	d, b = almanac.LookupSource("seed", 0, "location")
+	assert.Equal(t, 70, d)
+	assert.Equal(t, Override{SourceBase: 0, DestBase: 0, Count: 1}, b)
+}
+
 func Test_Sample(t *testing.T) {
 	almanac, err := NewAlmanac("sample")
 	require.NoError(t, err)
 	assert.Equal(t, 100, almanac.Max)
 	assert.Equal(t, 35, almanac.BestLocation())
 	assert.Equal(t, 46, almanac.BestLocation2())
+	assert.Equal(t, 46, almanac.BestLocation2b())
 	for seed, soil := range map[int]int{
 		0:  0,
 		1:  1,
@@ -121,6 +165,8 @@ func Test_Sample(t *testing.T) {
 		assert.Equal(t, soil, almanac.Lookup("seed", seed, "soil"))
 		l, _ := almanac.BoundedLookup("seed", seed, "soil")
 		assert.Equal(t, soil, l, "BoundedLookup wrong for seed %d", seed)
+		s, _ := almanac.LookupSource("seed", soil, "soil")
+		assert.Equal(t, seed, s, "LookupSource wrong for soil %d", soil)
 	}
 	for seed, location := range map[int]int{
 		79: 82,
@@ -132,6 +178,8 @@ func Test_Sample(t *testing.T) {
 		assert.Equal(t, location, almanac.Lookup("seed", seed, "location"))
 		l, _ := almanac.BoundedLookup("seed", seed, "location")
 		assert.Equal(t, location, l, "BoundedLookup wrong for seed %d", seed)
+		s, _ := almanac.LookupSource("seed", location, "location")
+		assert.Equal(t, seed, s, "LookupSource wrong for location %d", location)
 	}
 }
 
@@ -147,25 +195,19 @@ func Test_Part2(t *testing.T) {
 
 	best := almanac.BestLocation2()
 	assert.Less(t, best, 53266420, "guess 1")
+	log.Printf("Best Location for all seeds is: %d (WRONG)", best)
+
+	best = almanac.BestLocation2b()
+	assert.Less(t, best, 53266420, "guess 1")
 
 	log.Printf("Best Location for all seeds is: %d", best)
 }
 
 func Test_Test(t *testing.T) {
-	almanac, err := NewAlmanac("test")
+	almanac, err := NewAlmanac("sample")
 	require.NoError(t, err)
 
-	for seed, location := range map[int]int{
-		5:  5,
-		15: 15,
-		25: 25,
-		94: 25,
-		95: 24,
-		96: 26,
-	} {
-		assert.Equal(t, location, almanac.Lookup("seed", seed, "location"))
-		l, _ := almanac.BoundedLookup("seed", seed, "location")
-		assert.Equal(t, location, l, "BoundedLookup wrong for seed %d", seed)
-	}
-
+	s, b := almanac.LookupSource("seed", 53, "water")
+	assert.Equal(t, 55, s)
+	assert.Equal(t, Override{SourceBase: 54, DestBase: 50, Count: 7}, b)
 }
