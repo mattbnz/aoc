@@ -1,13 +1,15 @@
 package day7
 
 import (
+	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func MustHand(s string) Hand {
-	h, err := NewHand(s)
+	h, err := NewHand(s + " 0")
 	if err != nil {
 		panic(err)
 	}
@@ -74,4 +76,16 @@ func Test_HandCardCmp(t *testing.T) {
 		assert.Equal(t, -1, HandSortFunc(last, h), "%s was not less than %s", h, last)
 		last = h
 	}
+}
+
+func Test_Sample(t *testing.T) {
+	hands, err := NewHands("sample")
+	require.NoError(t, err)
+	assert.Equal(t, 6440, hands.Winnings())
+}
+
+func Test_Part1(t *testing.T) {
+	hands, err := NewHands("input")
+	require.NoError(t, err)
+	log.Printf("Winnings are: %d", hands.Winnings())
 }

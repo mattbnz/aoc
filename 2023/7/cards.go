@@ -6,9 +6,16 @@
 package day7
 
 import (
+	"bufio"
 	"cmp"
 	"fmt"
+	"os"
+	"slices"
 	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/golang/glog"
 )
 
 var cardValues = map[string]Card{
@@ -84,12 +91,23 @@ func (h HandType) String() string {
 
 type Hand struct {
 	Cards []Card
+	Bet   int
 
 	value HandType
 }
 
 func NewHand(s string) (h Hand, err error) {
-	for _, r := range s {
+	cards, bet, ok := strings.Cut(s, " ")
+	if !ok {
+		err = fmt.Errorf("invalid format: %s", s)
+		return
+	}
+	h.Bet, err = strconv.Atoi(bet)
+	if err != nil {
+		err = fmt.Errorf("bad bet value (%s): %w", bet, err)
+		return
+	}
+	for _, r := range cards {
 		var c Card
 		c, err = NewCard(string(r))
 		if err != nil {
@@ -166,4 +184,39 @@ func HandSortFunc(a, b Hand) (rv int) {
 		}
 	}
 	return 0
+}
+
+type Hands []Hand
+
+func NewHands(filename string) (hl Hands, er error) {
+	f, err := os.OpenFile(filename, os.O_RDONLY, 0)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	s := bufio.NewScanner(f)
+	lineno := 0
+	for s.Scan() {
+		h, err := NewHand(s.Text())
+		if err != nil {
+			err = fmt.Errorf("bad hand on line %d: %w", lineno, err)
+			return
+		}
+		lineno++
+
+		hl = append(hl, h)
+	}
+	glog.Infof("Read %d hands", len(hl))
+	return
+}
+
+func (h Hands) Winnings() (rv int) {
+	slices.SortFunc(h, HandSortFunc)
+	for rank, hand := range h {
+		winnings := hand.Bet * (rank + 1)
+		glog.V(1).Infof("Rank % 4d: %s bets % 4d and wins % 6d", rank, hand, hand.Bet, winnings)
+		rv += winnings
+	}
+	return
 }
