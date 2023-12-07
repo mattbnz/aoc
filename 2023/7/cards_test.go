@@ -9,7 +9,15 @@ import (
 )
 
 func MustHand(s string) Hand {
-	h, err := NewHand(s + " 0")
+	h, err := NewHand(s+" 0", false)
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+func MustJokerHand(s string) Hand {
+	h, err := NewHand(s+" 0", true)
 	if err != nil {
 		panic(err)
 	}
@@ -32,6 +40,12 @@ func Test_Hand(t *testing.T) {
 		assert.Equal(t, hType.String(), h.value.String())
 		assert.Equal(t, 0, HandSortFunc(h, h), "hand not equal to itself!")
 	}
+}
+
+func Test_JokerHands(t *testing.T) {
+	h1 := MustJokerHand("33332")
+	h2 := MustJokerHand("3333J")
+	assert.Equal(t, -1, HandSortFunc(h2, h1), "joker not less than 2!")
 }
 
 func Test_HandCmp(t *testing.T) {
@@ -78,14 +92,32 @@ func Test_HandCardCmp(t *testing.T) {
 	}
 }
 
+func Test_BestJokerHand(t *testing.T) {
+	assert.Equal(t, H_5Kind.String(), MustJokerHand("JJJJJ").value.String())
+	for _, h := range []Hand{MustJokerHand("T55J5"), MustJokerHand("KTJJT"), MustJokerHand("QQQJA")} {
+		assert.Equal(t, H_4Kind.String(), h.value.String(), "%s was not expected kind with joker", h)
+	}
+}
+
 func Test_Sample(t *testing.T) {
-	hands, err := NewHands("sample")
+	hands, err := NewHands("sample", false)
 	require.NoError(t, err)
 	assert.Equal(t, 6440, hands.Winnings())
+
+	jokerHands, err := NewHands("sample", true)
+	require.NoError(t, err)
+	assert.Equal(t, 5095, jokerHands.Winnings())
+
 }
 
 func Test_Part1(t *testing.T) {
-	hands, err := NewHands("input")
+	hands, err := NewHands("input", false)
 	require.NoError(t, err)
 	log.Printf("Winnings are: %d", hands.Winnings())
+}
+
+func Test_Part2(t *testing.T) {
+	jokerHands, err := NewHands("input", true)
+	require.NoError(t, err)
+	log.Printf("Winnings are: %d", jokerHands.Winnings())
 }

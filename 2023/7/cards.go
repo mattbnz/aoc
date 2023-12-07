@@ -18,20 +18,25 @@ import (
 	"github.com/golang/glog"
 )
 
+const JokerPlain = "J"
+const JokerMarker = "-"
+const Joker = JokerPlain + JokerMarker
+
 var cardValues = map[string]Card{
-	"A": 14,
-	"K": 13,
-	"Q": 12,
-	"J": 11,
-	"T": 10,
-	"9": 9,
-	"8": 8,
-	"7": 7,
-	"6": 6,
-	"5": 5,
-	"4": 4,
-	"3": 3,
-	"2": 2,
+	"A":        14,
+	"K":        13,
+	"Q":        12,
+	JokerPlain: 11,
+	"T":        10,
+	"9":        9,
+	"8":        8,
+	"7":        7,
+	"6":        6,
+	"5":        5,
+	"4":        4,
+	"3":        3,
+	"2":        2,
+	Joker:      1,
 }
 
 type Card int
@@ -39,7 +44,7 @@ type Card int
 func (c Card) String() string {
 	for s, v := range cardValues {
 		if v == c {
-			return s
+			return strings.TrimSuffix(s, JokerMarker)
 		}
 	}
 	return "!"
@@ -93,10 +98,12 @@ type Hand struct {
 	Cards []Card
 	Bet   int
 
+	WithJoker bool
+
 	value HandType
 }
 
-func NewHand(s string) (h Hand, err error) {
+func NewHand(s string, withJoker bool) (h Hand, err error) {
 	cards, bet, ok := strings.Cut(s, " ")
 	if !ok {
 		err = fmt.Errorf("invalid format: %s", s)
@@ -107,9 +114,14 @@ func NewHand(s string) (h Hand, err error) {
 		err = fmt.Errorf("bad bet value (%s): %w", bet, err)
 		return
 	}
+	h.WithJoker = withJoker
 	for _, r := range cards {
+		cS := string(r)
+		if withJoker && cS == "J" {
+			cS += JokerMarker
+		}
 		var c Card
-		c, err = NewCard(string(r))
+		c, err = NewCard(cS)
 		if err != nil {
 			return
 		}
@@ -119,19 +131,64 @@ func NewHand(s string) (h Hand, err error) {
 		err = fmt.Errorf("bad hand size")
 		return
 	}
-	h.recognize()
+	err = h.recognize()
 	return
 }
 
 func (h Hand) String() string {
-	return fmt.Sprintf("%s (%s%s%s%s%s)", h.value, h.Cards[0], h.Cards[1], h.Cards[2], h.Cards[3], h.Cards[4])
+	return fmt.Sprintf("%s (%s)", h.value, h.CardString())
 }
 
-func (h *Hand) recognize() {
+func (h Hand) CardString() string {
+	return fmt.Sprintf("%s%s%s%s%s", h.Cards[0], h.Cards[1], h.Cards[2], h.Cards[3], h.Cards[4])
+}
+
+func (h *Hand) bestJokerHand(jh Hand, level int) (ht HandType, err error) {
+	best := h.value
+	cs := jh.CardString()
+	glog.V(1).Infof("%sbestJokerHand for %s", strings.Repeat("", 0), jh)
+	for n, c := range jh.Cards {
+		if c != cardValues[Joker] {
+			continue
+		}
+		for r := cardValues["2"]; r <= cardValues["A"]; r++ {
+			if r == cardValues[JokerPlain] {
+				continue
+			}
+			var nh Hand
+			nh, err = NewHand(cs[:n]+r.String()+cs[n+1:]+" 0", true)
+			if err != nil {
+				return
+			}
+			if nh.value > best {
+				best = nh.value
+				glog.V(1).Infof("%s - %s is new best hand from %s", strings.Repeat("", 0), nh, best)
+			}
+		}
+	}
+	return best, nil
+}
+
+func (h *Hand) recognize() error {
 	kMap := map[Card]int{}
 	for _, c := range h.Cards {
 		kMap[c]++
 	}
+	h.value = h.recognizeHand(kMap)
+	if h.WithJoker && kMap[1] != 0 {
+		if kMap[1] == 5 {
+			return nil // Can't improve on 5 of a kind!
+		}
+		v, err := h.bestJokerHand(*h, 0)
+		if err != nil {
+			return err
+		}
+		h.value = v
+	}
+	return nil
+}
+
+func (h *Hand) recognizeHand(kMap map[Card]int) HandType {
 	syms := []Card{}
 	for s := range kMap {
 		syms = append(syms, s)
@@ -143,31 +200,28 @@ func (h *Hand) recognize() {
 	pairs := 0
 	for _, sym := range syms {
 		if kMap[sym] == 5 {
-			h.value = H_5Kind
-			return
+			return H_5Kind
 		}
 		if kMap[sym] == 4 {
-			h.value = H_4Kind
-			return
+			return H_4Kind
 		}
 		if kMap[sym] == 3 {
 			if len(kMap) == 2 && kMap[syms[1]] == 2 {
-				h.value = H_FullHouse
+				return H_FullHouse
 			} else {
-				h.value = H_3Kind
+				return H_3Kind
 			}
-			return
 		}
 		if kMap[sym] == 2 {
 			pairs++
 		}
 	}
 	if pairs == 2 {
-		h.value = H_2Pair
+		return H_2Pair
 	} else if pairs == 1 {
-		h.value = H_Pair
+		return H_Pair
 	} else {
-		h.value = H_High
+		return H_High
 	}
 }
 
@@ -188,7 +242,7 @@ func HandSortFunc(a, b Hand) (rv int) {
 
 type Hands []Hand
 
-func NewHands(filename string) (hl Hands, er error) {
+func NewHands(filename string, withJoker bool) (hl Hands, er error) {
 	f, err := os.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
 		return
@@ -198,7 +252,7 @@ func NewHands(filename string) (hl Hands, er error) {
 	s := bufio.NewScanner(f)
 	lineno := 0
 	for s.Scan() {
-		h, err := NewHand(s.Text())
+		h, err := NewHand(s.Text(), withJoker)
 		if err != nil {
 			err = fmt.Errorf("bad hand on line %d: %w", lineno, err)
 			return
