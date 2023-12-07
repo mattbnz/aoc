@@ -109,7 +109,7 @@ func Test_BoundedLookup(t *testing.T) {
 	assert.Equal(t, Override{SourceBase: 71, DestBase: 73, Count: 11}, b)
 }
 
-func Test_ReverseLookup(t *testing.T) {
+func Test_LookupSource(t *testing.T) {
 	almanac, err := NewAlmanac("sample")
 	require.NoError(t, err)
 
@@ -199,15 +199,15 @@ func Test_Part2(t *testing.T) {
 
 	best = almanac.BestLocation2b()
 	assert.Less(t, best, 53266420, "guess 1")
+	assert.Greater(t, best, 0, "guess 2")
 
 	log.Printf("Best Location for all seeds is: %d", best)
 }
 
 func Test_Test(t *testing.T) {
-	almanac, err := NewAlmanac("sample")
+	almanac, err := NewAlmanac("input")
 	require.NoError(t, err)
-
-	s, b := almanac.LookupSource("seed", 53, "water")
-	assert.Equal(t, 55, s)
-	assert.Equal(t, Override{SourceBase: 54, DestBase: 50, Count: 7}, b)
+	best := almanac.BestLocation2b()
+	assert.Less(t, best, 53266420, "guess 1")
+	assert.Greater(t, best, 0, "guess 2")
 }

@@ -296,7 +296,29 @@ func (a *Almanac) BestLocation2() int {
 // Returns the first (lowest) seed within bounds that exists in the starting seed list, along with
 // it's offset from the base of bounds.
 func (a *Almanac) LowestStart(bounds Override) (startSeed int, startOffset int) {
-	return -1, -1 // TODO
+	bStart := bounds.SourceBase
+	bEnd := bounds.SourceBase + bounds.Count
+
+	best := -1
+	offset := -1
+
+	for n := 0; n < len(a.Seeds); n += 2 {
+		seed, count := a.Seeds[n], a.Seeds[n+1]
+		endSeed := seed + count
+
+		if seed < bStart && bStart < endSeed {
+			if best == -1 || bStart < best {
+				best = bStart
+				offset = 0
+			}
+		} else if seed > bStart && seed < bEnd {
+			if best == -1 || seed < best {
+				best = seed
+				offset = seed - bStart
+			}
+		}
+	}
+	return best, offset
 }
 
 func (a *Almanac) LookupSource(source string, destID int, dest string) (int, Override) {
@@ -311,18 +333,23 @@ func (a *Almanac) LookupSource(source string, destID int, dest string) (int, Ove
 		return s, b
 	}
 	s2, b2 := a.LookupSource(source, s, m.Source)
-	final := b
-	final.DestBase = Max(b.DestBase, b.ToDest(b2.DestBase))
-	trimmedBase := final.DestBase - b.DestBase
-	final.SourceBase += trimmedBase
-	final.Count = Min(b.Count-trimmedBase, (b2.SourceBase+b2.Count)-final.SourceBase)
 
-	/*
-		final.SourceBase = Max(b.SourceBase, b.ToSource(b2.SourceBase))
-		trimmedBase := final.SourceBase - b.SourceBase
-		final.DestBase += trimmedBase
-		final.Count = Min(b.Count-trimmedBase, (b2.SourceBase+b2.Count)-final.DestBase)
-	*/
+	// b is PARENT -> dest override (e.g. humid -> location)
+	// b2 is PARENT2 > PARENT override  (e.g. temp -> humid)
+	// we want to return the -> location bound constrained by any PARENT limits, so start
+	// with the bound the original lookup of destID was found in.
+	final := b
+	// but then tax the max of that bound source range, and the start of the dest override
+	// in b2 (which is a PARENT id)
+	final.SourceBase = Max(b.SourceBase, b2.DestBase)
+	// work out how many seeds forward from the original SourceBase that has moved
+	trimmedBase := final.SourceBase - b.SourceBase
+	// and adjust the destination map as well
+	final.DestBase += trimmedBase
+	// Then for the count we tax the Min of either the size of the original source less any
+	// trimming at the start performed above (first argument), or the size of the PARENT2->PARENT
+	// bound return (looking at dest), less the newly calculated start.
+	final.Count = Min(b.Count-trimmedBase, (b2.DestBase+b2.Count)-final.DestBase)
 	//m.PutCache(dest, final, id, s2)
 	glog.V(1).Infof("%s (%s,%d) (%#v); (%#v) => (%s,%d) (%#v)",
 		callPrefix, source, s2, final, b, m.Source, s, b2)
@@ -340,7 +367,7 @@ func (a *Almanac) BestLocation2b() int {
 		glog.Infof("Location % 12d maps to seed % 12d with bounds %#v", loc, seed, b)
 		if startSeed, startOffset := a.LowestStart(b); startSeed != -1 {
 			glog.Infof(" + Bounds contain starting seed % 12d at offset % 12d!", startSeed, startOffset)
-			return loc + startOffset
+			return loc //+ startOffset
 		}
 
 	}
