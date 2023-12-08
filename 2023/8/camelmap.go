@@ -17,7 +17,6 @@ import (
 
 type Node struct {
 	Name string
-	m    *Map
 
 	Elements map[rune]string
 }
@@ -60,7 +59,6 @@ func NewMap(filename string) (m Map, err error) {
 		}
 		m.Nodes[p[1]] = &Node{
 			Name: p[1],
-			m:    &m,
 			Elements: map[rune]string{
 				'L': p[2],
 				'R': p[3],
@@ -70,11 +68,19 @@ func NewMap(filename string) (m Map, err error) {
 	return
 }
 
-func (m Map) StepsFrom(start, end string) int {
+func ZZZ(n string) bool {
+	return n == "ZZZ"
+}
+
+func EndsZ(n string) bool {
+	return strings.HasSuffix(n, "Z")
+}
+
+func (m Map) StepsFrom(start string, atEnd func(string) bool) int {
 	ip := 0
-	node := m.Nodes["AAA"]
+	node := m.Nodes[start]
 	n := 0
-	for node.Name != end {
+	for !atEnd(node.Name) {
 		glog.V(1).Infof("Step % 3d: %c from %s", n, m.Instructions[ip], node.Name)
 		node = m.Nodes[node.Elements[rune(m.Instructions[ip])]]
 		ip = (ip + 1) % len(m.Instructions)
@@ -121,4 +127,17 @@ func (m Map) SimultaneousSteps() int {
 		}
 	}
 	return step
+}
+
+func (m Map) LCMSteps() int {
+	aSteps := []int{}
+	for name := range m.Nodes {
+		if strings.HasSuffix(name, "A") {
+			steps := m.StepsFrom(name, EndsZ)
+			glog.Infof("%s takes %d steps to find Z", name, steps)
+			aSteps = append(aSteps, steps)
+		}
+	}
+	glog.Infof("%#v", aSteps)
+	return LCM(aSteps[0], aSteps[1], aSteps[2:]...)
 }
