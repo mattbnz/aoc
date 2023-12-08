@@ -33,3 +33,15 @@ func Test_Part1(t *testing.T) {
 	require.NoError(t, err)
 	log.Printf("Steps: %d", m.StepsFrom("AAA", "ZZZ"))
 }
+
+func Test_Part2_Sample(t *testing.T) {
+	m, err := NewMap("sample3")
+	require.NoError(t, err)
+	assert.Equal(t, 6, m.SimultaneousSteps())
+}
+
+func Test_Part2(t *testing.T) {
+	m, err := NewMap("input")
+	require.NoError(t, err)
+	log.Printf("Simultaneous Steps: %d", m.SimultaneousSteps())
+}
