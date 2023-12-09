@@ -51,3 +51,25 @@ func (s *Scan) Extrapolate(r Reading) int {
 	nextDiff := s.Extrapolate(diffs)
 	return r[len(r)-1] + nextDiff
 }
+
+func (s *Scan) ExtrapolateHistoryAndSum() int {
+	sum := 0
+	for _, seq := range s.Readings {
+		sum += s.ExtrapolateHistory(seq)
+	}
+	return sum
+}
+
+func (s *Scan) ExtrapolateHistory(r Reading) int {
+	diffs := Reading{}
+	last := r[0]
+	for n := 1; n < len(r); n++ {
+		diffs = append(diffs, r[n]-last)
+		last = r[n]
+	}
+	if Sum(diffs) == 0 {
+		return r[0]
+	}
+	nextDiff := s.ExtrapolateHistory(diffs)
+	return r[0] - nextDiff
+}
