@@ -6,6 +6,7 @@ import (
 	"io"
 )
 
+// 1 Based row, col indices
 type Pos struct {
 	row, col int
 }
@@ -14,36 +15,57 @@ func (p Pos) String() string {
 	return fmt.Sprintf("%d,%d", p.row, p.col)
 }
 
+func (p Pos) IsZero() bool {
+	return p.row == 0 && p.col == 0
+}
+
 type CardinalDirection int
 
 const (
-	NORTH CardinalDirection = iota
+	NO_DIRECTION CardinalDirection = iota
+	NORTH
 	EAST
 	SOUTH
 	WEST
 )
 
+var CardinalDirections = []CardinalDirection{NORTH, EAST, SOUTH, WEST}
+
 func (b CardinalDirection) String() string {
 	if b == NORTH {
-		return "^"
+		return "N"
 	} else if b == EAST {
-		return ">"
+		return "E"
 	} else if b == SOUTH {
-		return "v"
+		return "S"
 	} else if b == WEST {
-		return "<"
+		return "W"
 	}
 	return "!"
 }
 
+func (b CardinalDirection) Opposite() CardinalDirection {
+	switch b {
+	case NORTH:
+		return SOUTH
+	case SOUTH:
+		return NORTH
+	case EAST:
+		return WEST
+	case WEST:
+		return EAST
+	}
+	return NO_DIRECTION
+}
+
 func NewCardinalDirection(s string) (CardinalDirection, error) {
-	if s == "<" {
+	if s == "^" || s == "N" {
 		return NORTH, nil
-	} else if s == ">" {
-		return EAST, nil
-	} else if s == "^" {
+	} else if s == "v" || s == "S" {
 		return SOUTH, nil
-	} else if s == "v" {
+	} else if s == ">" || s == "E" {
+		return EAST, nil
+	} else if s == "<" || s == "W" {
 		return WEST, nil
 	}
 	return NORTH, fmt.Errorf("%s is not a cardinal direction", s)
@@ -78,6 +100,29 @@ func (g Grid) C(p Pos) Cell {
 	return g.c[p]
 }
 
+func (g Grid) Next(p Pos, dir CardinalDirection) (np Pos, c Cell, found bool) {
+	switch dir {
+	case NORTH:
+		np.row, np.col = p.row-1, p.col
+	case SOUTH:
+		np.row, np.col = p.row+1, p.col
+	case EAST:
+		np.row, np.col = p.row, p.col+1
+	case WEST:
+		np.row, np.col = p.row, p.col-1
+	default:
+		found = false
+		return
+	}
+	if np.row < 1 || np.col < 1 || np.row > g.maxrow || np.col > g.maxcol {
+		found = false
+		return
+	}
+	found = true
+	c = g.C(np)
+	return
+}
+
 // Returns a copy of this grid at the current minute (doesn't preserve past minutes)
 func (g Grid) Copy() Grid {
 	ng := Grid{
@@ -98,6 +143,17 @@ func (g Grid) Print() {
 		fmt.Println()
 	}
 	fmt.Println()
+}
+
+func (g Grid) Each(cb func(Pos, Cell) bool) {
+	for row := 1; row <= g.maxrow; row++ {
+		for col := 1; col <= g.maxcol; col++ {
+			p := Pos{row, col}
+			if !cb(p, g.C(p)) {
+				return
+			}
+		}
+	}
 }
 
 func NewGrid[C Cell](r io.Reader) Grid {
