@@ -11,8 +11,9 @@ type Space struct {
 
 	Galaxies map[int]Pos
 
-	RowSizes map[int]int
-	ColSizes map[int]int
+	ExpandedRows []int
+	ExpandedCols []int
+	ExpandedBy   int
 }
 
 func NewSpace(filename string) (Space, error) {
@@ -68,17 +69,76 @@ func (s *Space) Expand() {
 	}
 }
 
+func (s *Space) ExpandBy(by int) {
+	for row := 1; row <= s.g.maxrow; row++ {
+		hasGalaxy := false
+		for col := 1; col <= s.g.maxcol; col++ {
+			if s.g.C(Pos{row, col}).(BaseCell).Symbol != "." {
+				hasGalaxy = true
+				break
+			}
+		}
+		if hasGalaxy {
+			continue
+		}
+		s.ExpandedRows = append(s.ExpandedRows, row)
+	}
+
+	for col := 1; col <= s.g.maxcol; col++ {
+		hasGalaxy := false
+		for row := 1; row <= s.g.maxrow; row++ {
+			if s.g.C(Pos{row, col}).(BaseCell).Symbol != "." {
+				hasGalaxy = true
+				break
+			}
+		}
+		if hasGalaxy {
+			continue
+		}
+		s.ExpandedCols = append(s.ExpandedCols, col)
+	}
+	s.ExpandedBy = by
+}
+
 func (s *Space) FindGalaxies() {
 	gN := 1
 	s.g.Each(func(p Pos, c Cell) bool {
 		if c.(BaseCell).Symbol == "#" {
-			s.Galaxies[gN] = p
-			glog.V(1).Infof("Galaxy %d at %s", gN, p)
+			ep := s.ExpandPos(p)
+			s.Galaxies[gN] = ep
+			glog.V(1).Infof("Galaxy %d at %s (from %s)", gN, ep, p)
 			gN++
 		}
 		return true
 	})
 	glog.Infof("Found %d galaxies", len(s.Galaxies))
+}
+
+// returns the virtual (expanded pos p)
+func (s *Space) ExpandPos(p Pos) (ep Pos) {
+	if s.ExpandedBy == 0 {
+		return p
+	}
+	rEidx := 0
+	ep.row = 1
+	for row := 1; row < p.row; row++ {
+		if rEidx < len(s.ExpandedRows) && s.ExpandedRows[rEidx] == row {
+			ep.row += s.ExpandedBy - 1
+			rEidx++
+		}
+		ep.row++
+	}
+
+	cEidx := 0
+	ep.col = 1
+	for col := 1; col < p.col; col++ {
+		if cEidx < len(s.ExpandedCols) && s.ExpandedCols[cEidx] == col {
+			ep.col += s.ExpandedBy - 1
+			cEidx++
+		}
+		ep.col++
+	}
+	return
 }
 
 func (s *Space) PathLength(a, b Pos) int {
@@ -89,8 +149,12 @@ type gKey struct {
 	a, b int
 }
 
-func (s *Space) PathSum() (rv int) {
-	s.Expand()
+func (s *Space) PathSum(expansionFactor int) (rv int) {
+	if expansionFactor == 2 {
+		s.Expand()
+	} else {
+		s.ExpandBy(expansionFactor)
+	}
 	s.FindGalaxies()
 	cache := map[gKey]int{}
 	for gA, aPos := range s.Galaxies {
