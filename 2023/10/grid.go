@@ -76,7 +76,7 @@ type Cell interface {
 	String() string
 
 	// Returns a new instance of Cell based on the given string.
-	New(string) Cell
+	New(string, Pos) Cell
 }
 
 type BaseCell struct {
@@ -145,6 +145,22 @@ func (g Grid) Print() {
 	fmt.Println()
 }
 
+func (g Grid) PrintNumbered() {
+	fmt.Print("X")
+	for col := 1; col <= g.maxcol; col++ {
+		fmt.Printf("%d", col%10)
+	}
+	fmt.Println()
+	for row := 1; row <= g.maxrow; row++ {
+		fmt.Printf("%d", row%10)
+		for col := 1; col <= g.maxcol; col++ {
+			fmt.Print(g.C(Pos{row, col}))
+		}
+		fmt.Println()
+	}
+	fmt.Println()
+}
+
 func (g Grid) Each(cb func(Pos, Cell) bool) {
 	for row := 1; row <= g.maxrow; row++ {
 		for col := 1; col <= g.maxcol; col++ {
@@ -169,7 +185,7 @@ func NewGrid[C Cell](r io.Reader) Grid {
 	for s.Scan() {
 		for col, cStr := range s.Text() {
 			p := Pos{row, col + 1}
-			c := cFactory.New(string(cStr))
+			c := cFactory.New(string(cStr), p)
 			g.c[p] = c
 			g.maxcol = Max(g.maxcol, col+1)
 		}
