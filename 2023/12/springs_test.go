@@ -92,7 +92,7 @@ func Test_Sample_Part2(t *testing.T) {
 
 	expect := []int{1, 16384, 1, 16, 2500, 506250}
 	for n, e := range expect {
-		glog.V(1).Infof("Test Case %d", n)
+		glog.Infof("Test Case %d", n)
 		assert.Equal(t, e, rows.Arrangements(n, 5), "sample %d", n)
 	}
 }
@@ -116,6 +116,6 @@ func Test_Debug(t *testing.T) {
 	rows, err := NewSpringRows("sample")
 	require.NoError(t, err)
 	rows.Unfold()
-	glog.Infof("%d Springs", len(rows[5].Springs))
-	assert.Equal(t, 16, rows.Arrangements(5, 5))
+	glog.Infof("%d Springs", len(rows[2].Springs))
+	assert.Equal(t, 1, rows.Arrangements(2, 5))
 }

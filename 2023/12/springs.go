@@ -87,7 +87,7 @@ type Match struct {
 
 // Matches returns the positions a "link" spring after a match of the pattern in spec could be, for all matches in sl.
 func (sl SpringList) potentialMatches(spec Ints, from int) (rv []Match) {
-	glog.Infof(" canMatchTil %s from %d (of %d)", sl, from, len(sl))
+	glog.V(1).Infof(" canMatchTil %s from %d (of %d)", sl, from, len(sl))
 	sI := 0
 	badTil := -1
 	for n := from; n < len(sl); n++ {
@@ -156,14 +156,14 @@ func (sl *SpringList) lastBad(from int) int {
 // findArrangements iteratively checks along the list of springs, recursing only when an unknown spring is found following an already valid
 // pattern.
 func (sl *SpringList) findArrangements(from, match, badTil int, spec Ints, matchLimit int) (rv int) {
-	glog.Infof(" %s%s from %d (of %d) at match %d", "", sl, from, len(*sl), match)
+	glog.V(1).Infof(" %s%s from %d (of %d) at match %d", "", sl, from, len(*sl), match)
 
 	matches := sl.potentialMatches(spec, from)
 	match++
 
 MATCHES:
 	for _, m := range matches {
-		glog.Infof("Found %d match from %d to %d: %s", match, from, m.Length, m.Springs[from:m.Length])
+		glog.V(1).Infof("Found %d match from %d to %d: %s", match, from, m.Length, m.Springs[from:m.Length])
 		for linkPos := m.Length; linkPos < len(*sl); linkPos++ {
 			spring := m.Springs[linkPos]
 			// don't need to check for BAD before unknown, OK here, because potentialMatches will only return options with a following OK/UNKNOWN or end.
@@ -173,20 +173,23 @@ MATCHES:
 			if spring == S_UNKNOWN {
 				if match != matchLimit {
 					// explore this path as a potential new start
-					glog.Infof("Exploring %d as BAD", linkPos)
+					glog.V(1).Infof("Exploring %d as BAD", linkPos)
 					next := m.Springs.NewWith(linkPos, S_BAD)
 					rv += next.findArrangements(linkPos, match, -1, spec, matchLimit)
 				}
 			} else if spring == S_BAD && match != matchLimit {
 				// must be the start of the next pattern
 				rv += m.Springs.findArrangements(linkPos, match, -1, spec, matchLimit)
+				break
 			} else {
-				glog.Infof("found cycle %d/%d prematurely ending at %d/%d", match, matchLimit, m.Length, len(*sl))
+				glog.V(1).Infof("found cycle %d/%d prematurely ending at %d/%d", match, matchLimit, m.Length, len(*sl))
 				continue MATCHES
 			}
 		}
 		// hit the end without finding another BAD spring, so this is a good match.
-		rv++
+		if match == matchLimit {
+			rv++
+		}
 	}
 
 	return
