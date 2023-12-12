@@ -58,19 +58,48 @@ func (sl *SpringList) NewWith(n int, state Spring) (rv SpringList) {
 }
 
 // Arrangements recursively computes the potential arrangements that can match spec by replacing unknown springs with either good or bad ones.
-func (sl *SpringList) Arrangements(spec Ints) int {
-	return sl.findArrangements(0, 0, -1, spec)
+func (sl *SpringList) Arrangements(spec Ints, unfoldFactor int) int {
+	return sl.findArrangements(0, 0, -1, spec, unfoldFactor)
+}
+
+// Returns true if pattern can match sl[from:from+len(pattern)] (e.g. each item in SL either directly matches pattern, or is unknown).
+func (sl *SpringList) canMatch(pattern SpringList, from int) bool {
+	if from+len(pattern) > len(*sl) {
+		glog.V(1).Infof("cannot match %s from %d in row of only %d", pattern, from, len(*sl))
+		return false
+	}
+	for n := 0; n < len(pattern); n++ {
+		if (*sl)[from+n] == S_UNKNOWN {
+			continue
+		}
+		if (*sl)[from+n] != pattern[n] {
+			glog.V(1).Infof("pattern mismatch at %d (pattern idx %d, expected %s got %s): %s vs %s", from+n, n, pattern[n], (*sl)[from+n], (*sl)[from:], pattern)
+			return false
+		}
+	}
+	return true
+}
+
+// Returns how many springs backwards the last bad spring was. Zero if no previous bad spring was found.
+func (sl *SpringList) lastBad(from int) int {
+	for n := from - 1; n >= 0; n-- {
+		if (*sl)[n] == S_BAD {
+			return from - n
+		}
+	}
+	return 0
 }
 
 // findArrangements iteratively checks along the list of springs, recursing only when an unknown spring is found following an already valid
 // pattern.
-func (sl *SpringList) findArrangements(from, sI, badTil int, spec Ints) int {
+func (sl *SpringList) findArrangements(from, sI, badTil int, spec Ints, unfoldFactor int) int {
+	glog.Infof(" %s%s from %d (of %d)", "", sl, from, len(*sl))
 	for n := from; n < len(*sl); n++ {
 		s := (*sl)[n]
 		if s == S_UNKNOWN {
 			a := sl.NewWith(n, S_OK)
 			b := sl.NewWith(n, S_BAD)
-			return a.findArrangements(n, sI, badTil, spec) + b.findArrangements(n, sI, badTil, spec)
+			return a.findArrangements(n, sI, badTil, spec, unfoldFactor) + b.findArrangements(n, sI, badTil, spec, unfoldFactor)
 		}
 		if s == S_OK {
 			if badTil != -1 && n <= badTil {
@@ -91,12 +120,57 @@ func (sl *SpringList) findArrangements(from, sI, badTil int, spec Ints) int {
 		}
 
 		if badTil == -1 {
-			if sI >= len(spec) {
+			if sI >= (len(spec) * unfoldFactor) {
 				glog.V(2).Infof("bad spring at %d makes %d bad runs, when expecting %d in %s, %s", n, sI, len(spec), sl, spec)
 				return 0 // too many bad springs
 			}
+			eSi := sI
+			if unfoldFactor > 1 && sI >= len(spec) {
+				eSi = sI % len(spec)
+				if eSi == 0 {
+					linkSize := sl.lastBad(n) - 1 // 1 this spring, 1 the last bad spring
+					if linkSize == 0 {
+						glog.Fatalf("End of bad spring cycle in %s at %d with no previous bad spring!", sl, n)
+					}
+					cycLen := n - linkSize
+					cycN := (len(*sl) / cycLen) - 1 // -1 because first cycle is already up to n; only want remaining.
+					glog.Infof("Evaluating potential %d spring cycle (x%d) from %d-%d + %d links: %s", cycLen, cycN, 0, cycLen, linkSize, (*sl)[0:n])
+					cycI := 0
+					linkArrangements := 1
+					for {
+						cycS := n + (cycI * (cycLen + linkSize))
+						if cycS >= len(*sl) {
+							break
+						}
+						if !sl.canMatch((*sl)[0:cycLen], cycS) {
+							return 0
+						}
+						for linkN := 0; linkN < linkSize; linkN++ {
+							linkPos := cycS + cycLen + linkN
+							if linkPos >= len(*sl) {
+								break
+							}
+							// non final cycles must be followed by an OK spring to "link" to the start of the next cycle of bad springs.
+							link := (*sl)[linkPos]
+							if link == S_BAD {
+								glog.Infof("Expected link at %d (%s) was BAD; from cycI=%d, cycS=%d", linkPos, link, cycI, cycS)
+								return 0
+							}
+							if link == S_UNKNOWN {
+								glog.Infof("Recursing in cycle at %d", linkPos)
+								next := sl.NewWith(linkPos, S_BAD)
+								linkArrangements += next.findArrangements(linkPos, 0, -1, spec, unfoldFactor-(sI/len(spec)))
+							}
+						}
+						cycI++
+					}
+					glog.Infof("Cycle is viable!")
+					return 1
+				}
+			}
+
 			// first bad spring in a run
-			badTil = n + spec[sI] - 1 // s counts as the first item in the run
+			badTil = n + spec[eSi] - 1 // s counts as the first item in the run
 			sI++
 		} else {
 			if n > badTil {
@@ -120,6 +194,19 @@ func (sl *SpringList) findArrangements(from, sI, badTil int, spec Ints) int {
 type SpringRow struct {
 	Springs SpringList
 	BadRuns Ints
+}
+
+// Returns a new SpringRow based on this row, but unfolded!
+func (sr SpringRow) Unfold() (nr SpringRow) {
+	nr.BadRuns = append(nr.BadRuns, sr.BadRuns...)
+	for n := 0; n < 5; n++ {
+		nr.Springs = append(nr.Springs, sr.Springs...)
+		//nr.BadRuns = append(nr.BadRuns, sr.BadRuns...)
+		if n != 4 {
+			nr.Springs = append(nr.Springs, S_UNKNOWN)
+		}
+	}
+	return
 }
 
 type SpringRows []SpringRow
@@ -152,17 +239,24 @@ func NewSpringRows(filename string) (rows SpringRows, err error) {
 	return
 }
 
-func (r *SpringRows) Arrangements(row int) int {
+func (r *SpringRows) Unfold() {
+	for n, sr := range *r {
+		(*r)[n] = sr.Unfold()
+	}
+}
+
+func (r *SpringRows) Arrangements(row int, unfoldFactor int) int {
 	if row < 0 || row >= len(*r) {
 		glog.Fatalf("invalid row index: %d", row)
 	}
 	sr := (*r)[row]
-	return sr.Springs.Arrangements(sr.BadRuns)
+	return sr.Springs.Arrangements(sr.BadRuns, unfoldFactor)
 }
 
-func (r *SpringRows) SumArrangements() (rv int) {
-	for n, _ := range *r {
-		rv += r.Arrangements(n)
+func (r *SpringRows) SumArrangements(unfoldFactor int) (rv int) {
+	for n, sr := range *r {
+		glog.V(1).Infof("Starting row %d: %s (len=%d), %s", n, sr, len(sr.Springs), sr.BadRuns)
+		rv += r.Arrangements(n, unfoldFactor)
 	}
 	return
 }
