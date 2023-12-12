@@ -57,18 +57,25 @@ func (sl *SpringList) NewWith(n int, state Spring) (rv SpringList) {
 	return
 }
 
-// Matches returns true if the bad springs in sl match the pattern in spec
-func (sl *SpringList) Matches(spec Ints) bool {
-	sI := 0
-	badTil := -1
-	for n, s := range *sl {
+// Arrangements recursively computes the potential arrangements that can match spec by replacing unknown springs with either good or bad ones.
+func (sl *SpringList) Arrangements(spec Ints) int {
+	return sl.findArrangements(0, 0, -1, spec)
+}
+
+// findArrangements iteratively checks along the list of springs, recursing only when an unknown spring is found following an already valid
+// pattern.
+func (sl *SpringList) findArrangements(from, sI, badTil int, spec Ints) int {
+	for n := from; n < len(*sl); n++ {
+		s := (*sl)[n]
 		if s == S_UNKNOWN {
-			glog.Fatalf("Matches called on list (%s) with unknown spring!", sl)
+			a := sl.NewWith(n, S_OK)
+			b := sl.NewWith(n, S_BAD)
+			return a.findArrangements(n, sI, badTil, spec) + b.findArrangements(n, sI, badTil, spec)
 		}
 		if s == S_OK {
 			if badTil != -1 && n <= badTil {
 				glog.V(2).Infof("good spring at %d when expecting bad til %d in %s, %s", n, badTil, sl, spec)
-				return false // found a good spring when expecting a run of bads
+				return 0 // found a good spring when expecting a run of bads
 			}
 			if n > badTil {
 				badTil = -1 // reset expectation
@@ -80,13 +87,13 @@ func (sl *SpringList) Matches(spec Ints) bool {
 		if badTil != -1 && n == badTil+1 {
 			// bad following expected end of sequence, when we need an OK!
 			glog.V(2).Infof("bad spring at %d needs to be OK in %s, %s", n, sl, spec)
-			return false // too many bad springs
+			return 0 // too many bad springs
 		}
 
 		if badTil == -1 {
 			if sI >= len(spec) {
 				glog.V(2).Infof("bad spring at %d makes %d bad runs, when expecting %d in %s, %s", n, sI, len(spec), sl, spec)
-				return false // too many bad springs
+				return 0 // too many bad springs
 			}
 			// first bad spring in a run
 			badTil = n + spec[sI] - 1 // s counts as the first item in the run
@@ -94,37 +101,20 @@ func (sl *SpringList) Matches(spec Ints) bool {
 		} else {
 			if n > badTil {
 				glog.V(2).Infof("bad spring at %d exceeds expected run til %d, when expecting %d in %s, %s", n, badTil, sl, spec)
-				return false // sequence too long
+				return 0 // sequence too long
 			}
 		}
 	}
 	if badTil != -1 && badTil >= len(*sl) {
 		// bad sequence ran off the end
 		glog.V(2).Infof("ran out of bad springs, when expecting til %d in %s of length %d with %s", badTil, sl, len(*sl), spec)
-		return false
+		return 0
 	}
 	if sI != len(spec) {
 		glog.V(2).Infof("only matched %d/%d bad spring sequences in %s with %s", sI, len(spec), sl, spec)
+		return 0
 	}
-	return sI == len(spec)
-}
-
-// Arrangements recursively computes the potential arrangements that can match spec by replacing unknown springs with either good or bad ones.
-func (sl *SpringList) Arrangements(spec Ints) int {
-	for n, s := range *sl {
-		if s == S_OK || s == S_BAD {
-			continue
-		}
-		// Found first unknown spring
-		a := sl.NewWith(n, S_OK)
-		b := sl.NewWith(n, S_BAD)
-		return a.Arrangements(spec) + b.Arrangements(spec)
-	}
-	if sl.Matches(spec) {
-		glog.V(1).Infof("Found Match for %s: %s", spec, sl)
-		return 1
-	}
-	return 0
+	return 1
 }
 
 type SpringRow struct {

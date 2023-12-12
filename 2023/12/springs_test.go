@@ -19,36 +19,6 @@ func Test_NewWith(t *testing.T) {
 	assert.Equal(t, SpringList{S_OK, S_OK, S_OK}, sl.NewWith(1, S_OK))
 }
 
-func Test_Matches(t *testing.T) {
-	for n, tCase := range []SpringRow{
-		{SpringList{}, Ints{}},
-		{SpringList{S_OK}, Ints{}},
-		{SpringList{S_OK, S_OK}, Ints{}},
-		{SpringList{S_BAD}, Ints{1}},
-		{SpringList{S_BAD, S_BAD}, Ints{2}},
-		{SpringList{S_BAD, S_OK, S_BAD, S_OK, S_BAD, S_BAD, S_BAD}, Ints{1, 1, 3}},
-		{SpringList{S_OK, S_OK, S_BAD, S_OK, S_BAD, S_OK, S_BAD, S_BAD, S_BAD}, Ints{1, 1, 3}}, // OK prefix
-		{SpringList{S_BAD, S_OK, S_BAD, S_OK, S_BAD, S_BAD, S_BAD, S_OK, S_OK}, Ints{1, 1, 3}}, // OK suffix
-		{SpringList{S_BAD, S_OK, S_OK, S_BAD, S_OK, S_OK, S_BAD, S_BAD, S_BAD}, Ints{1, 1, 3}}, // OKs middle
-	} {
-		assert.True(t, tCase.Springs.Matches(tCase.BadRuns), "true case %d: %s", n, tCase)
-	}
-	for n, tCase := range []SpringRow{
-		{SpringList{}, Ints{1}},
-		{SpringList{S_OK}, Ints{1}},
-		{SpringList{S_OK, S_OK}, Ints{1}},
-		{SpringList{S_BAD}, Ints{2}},
-		{SpringList{S_BAD}, Ints{}},
-		{SpringList{}, Ints{1, 1, 3}},
-		{SpringList{S_OK}, Ints{1, 1, 3}},
-		{SpringList{S_BAD}, Ints{1, 1, 3}},
-		{SpringList{S_OK, S_OK, S_BAD, S_OK, S_BAD, S_BAD, S_BAD}, Ints{1, 1, 3}},                                // matches 1,3
-		{SpringList{S_OK, S_BAD, S_BAD, S_BAD, S_OK, S_OK, S_OK, S_OK, S_BAD, S_OK, S_OK, S_BAD}, Ints{3, 2, 1}}, // matches 1,3
-	} {
-		assert.False(t, tCase.Springs.Matches(tCase.BadRuns), "false case %d: %s", n, tCase)
-	}
-}
-
 func Test_Sample(t *testing.T) {
 	rows, err := NewSpringRows("sample")
 	require.NoError(t, err)
@@ -65,8 +35,10 @@ func Test_Sample(t *testing.T) {
 func Test_Part1(t *testing.T) {
 	rows, err := NewSpringRows("input")
 	require.NoError(t, err)
+	a := rows.SumArrangements()
+	assert.Equal(t, 7407, a)
 
-	t.Logf("Arrangement sum is %d", rows.SumArrangements())
+	t.Logf("Arrangement sum is %d", a)
 }
 
 func Test_Part2(t *testing.T) {
