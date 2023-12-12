@@ -1,12 +1,23 @@
 package day12
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
 )
 
-func numberList(list string) (rv []int) {
+type Ints []int
+
+func (c Ints) String() string {
+	s := []string{}
+	for _, i := range c {
+		s = append(s, fmt.Sprintf("%d", i))
+	}
+	return strings.Join(s, ",")
+}
+
+func NewIntsFromCSV(list string) (rv Ints) {
 	for _, nStr := range strings.Split(strings.TrimSpace(list), ",") {
 		nStr = strings.TrimSpace(nStr)
 		if nStr == "" {
