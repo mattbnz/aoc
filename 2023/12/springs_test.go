@@ -105,10 +105,17 @@ func Test_Part2(t *testing.T) {
 	t.Logf("Arrangement sum is %d", rows.SumArrangements(5))
 }
 
+func Test_Debug1(t *testing.T) {
+	rows, err := NewSpringRows("sample")
+	require.NoError(t, err)
+	glog.Infof("%d Springs", len(rows[5].Springs))
+	assert.Equal(t, 10, rows.Arrangements(5, 1))
+}
+
 func Test_Debug(t *testing.T) {
 	rows, err := NewSpringRows("sample")
 	require.NoError(t, err)
 	rows.Unfold()
-	glog.Infof("%d Springs", len(rows[3].Springs))
-	assert.Equal(t, 16, rows.Arrangements(3, 5))
+	glog.Infof("%d Springs", len(rows[5].Springs))
+	assert.Equal(t, 16, rows.Arrangements(5, 5))
 }
