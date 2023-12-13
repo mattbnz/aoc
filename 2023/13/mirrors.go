@@ -13,7 +13,7 @@ type MirrorValley struct {
 	Smudged bool
 }
 
-func (m MirrorValley) ReflectsVertical(g Grid, ignoreCol int) (reflectsOn int, nearMatches []Mismatch, ok bool) {
+func (m MirrorValley) ReflectsVertical(g Grid, ignoreCol int) (reflectsOn int, nearMatches []Mismatch, otherMismatches []Mismatch, ok bool) {
 	reflectsOn = -1
 	for col := 2; col <= g.maxcol; col++ {
 		if col == ignoreCol {
@@ -21,6 +21,10 @@ func (m MirrorValley) ReflectsVertical(g Grid, ignoreCol int) (reflectsOn int, n
 		}
 		mismatched := m.colMismatch(g, col, col-1)
 		if len(mismatched) != 0 {
+			for _, mm := range mismatched {
+				mm.col = col
+				otherMismatches = append(otherMismatches, mm)
+			}
 			continue
 		}
 		nm, colOk := m.checkColReflects(g, col)
@@ -39,7 +43,7 @@ func (m MirrorValley) ReflectsVertical(g Grid, ignoreCol int) (reflectsOn int, n
 	return
 }
 
-func (m MirrorValley) ReflectsHorizontal(g Grid, ignoreRow int) (reflectsOn int, nearMatches []Mismatch, ok bool) {
+func (m MirrorValley) ReflectsHorizontal(g Grid, ignoreRow int) (reflectsOn int, nearMatches []Mismatch, otherMismatches []Mismatch, ok bool) {
 	reflectsOn = -1
 	for row := 2; row <= g.maxrow; row++ {
 		if row == ignoreRow {
@@ -47,6 +51,10 @@ func (m MirrorValley) ReflectsHorizontal(g Grid, ignoreRow int) (reflectsOn int,
 		}
 		mismatched := m.rowMismatch(g, row, row-1)
 		if len(mismatched) != 0 {
+			for _, mm := range mismatched {
+				mm.row = row
+				otherMismatches = append(otherMismatches, mm)
+			}
 			continue
 		}
 		nm, rowOk := m.checkRowReflects(g, row)
@@ -74,7 +82,9 @@ func (m MirrorValley) colMismatch(g Grid, c1, c2 int) (rv []Mismatch) {
 			rv = append(rv, Mismatch{a: c1, b: c2, idx: r})
 		}
 	}
-	glog.V(1).Infof("found matching cols %d and %d", c1, c2)
+	if len(rv) == 0 {
+		glog.V(1).Infof("found matching cols %d and %d", c1, c2)
+	}
 	return
 }
 
@@ -87,7 +97,9 @@ func (m MirrorValley) rowMismatch(g Grid, r1, r2 int) (rv []Mismatch) {
 			rv = append(rv, Mismatch{a: r1, b: r2, idx: c})
 		}
 	}
-	glog.V(1).Infof("found matching rows %d and %d", r1, r2)
+	if len(rv) == 0 {
+		glog.V(1).Infof("found matching rows %d and %d", r1, r2)
+	}
 	return
 }
 
@@ -160,11 +172,11 @@ func (m MirrorValley) Score(g Grid) int {
 }
 
 func (m MirrorValley) ScoreIgnoring(g Grid, iR, iC int) int {
-	r, _, ok := m.ReflectsHorizontal(g, iR)
+	r, _, _, ok := m.ReflectsHorizontal(g, iR)
 	if ok {
 		return (r - 1) * 100
 	}
-	c, _, ok := m.ReflectsVertical(g, iC)
+	c, _, _, ok := m.ReflectsVertical(g, iC)
 	if ok {
 		return c - 1
 	}
@@ -184,44 +196,53 @@ func (m MirrorValley) FlipCell(c Cell) BaseCell {
 }
 
 func (m MirrorValley) ScoreSmudged(g Grid) int {
-	var mm []Mismatch
-	r, mmH, _ := m.ReflectsHorizontal(g, -1)
-	mm = append(mm, mmH...)
-	c, mmV, _ := m.ReflectsVertical(g, -1)
-	mm = append(mm, mmV...)
-	glog.Infof("Found %d mismatches to try", len(mm))
-	scores := []int{}
-	for _, t := range mm {
-		var aPos, bPos Pos
-		if t.col > 0 {
-			aPos = Pos{t.idx, t.a}
-			bPos = Pos{t.idx, t.b}
-		} else if t.row > 0 {
-			aPos = Pos{t.a, t.idx}
-			bPos = Pos{t.b, t.idx}
-		} else {
-			glog.Fatalf("invalid mismatch: %#v", t)
-		}
-		for _, p := range []Pos{aPos, bPos} {
-			g2 := g.Copy()
-			g2.SetC(p, m.FlipCell(g.C(p)))
-			glog.Infof("Flipping %s", p)
-			score := m.ScoreIgnoring(g2, r, c)
-			if score != 0 {
-				glog.Infof(" - Got score of %d", score)
-				scores = append(scores, score)
+	var mmReflected, mmOther []Mismatch
+	r, mmH, aMMh, _ := m.ReflectsHorizontal(g, -1)
+	mmReflected = append(mmReflected, mmH...)
+	mmOther = append(mmOther, aMMh...)
+	c, mmV, aMMv, _ := m.ReflectsVertical(g, -1)
+	mmReflected = append(mmReflected, mmV...)
+	mmOther = append(mmOther, aMMv...)
+	glog.Infof("Found %d reflected, and %d other mismatches to try", len(mmReflected), len(mmOther))
+	for _, mm := range [][]Mismatch{mmReflected, mmOther} {
+		scores := map[int]int{}
+		for _, t := range mm {
+			var aPos, bPos Pos
+			if t.col > 0 {
+				aPos = Pos{t.idx, t.a}
+				bPos = Pos{t.idx, t.b}
+			} else if t.row > 0 {
+				aPos = Pos{t.a, t.idx}
+				bPos = Pos{t.b, t.idx}
 			} else {
-				glog.Infof(" -  doesn't give a reflection")
+				glog.Fatalf("invalid mismatch: %#v", t)
+			}
+			for _, p := range []Pos{aPos, bPos} {
+				g2 := g.Copy()
+				g2.SetC(p, m.FlipCell(g.C(p)))
+				glog.V(1).Infof("Flipping %s", p)
+				score := m.ScoreIgnoring(g2, r, c)
+				if score != 0 {
+					glog.Infof("Flipping %s - Got score of %d (from %s)", p, score, t)
+					scores[score]++
+				} else {
+					glog.V(1).Infof(" -  doesn't give a reflection")
+				}
+			}
+		}
+		if len(scores) == 0 {
+			continue
+		} else if len(scores) > 1 {
+			glog.Fatalf("Got %d possible scores!", len(scores))
+		} else {
+			for score := range scores {
+				return score
 			}
 		}
 	}
-	if len(scores) == 0 {
-		glog.Errorf("Found no possible reflections!")
-		return 0
-	} else if len(scores) > 1 {
-		glog.Errorf("Got %d possible scores!, returning first", len(scores))
-	}
-	return scores[0]
+	glog.Errorf("Found no possible reflections!")
+	g.Print()
+	return 0
 }
 
 func (m MirrorValley) ScoreSum() (rv int) {

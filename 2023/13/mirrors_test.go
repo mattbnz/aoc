@@ -12,12 +12,12 @@ func Test_Sample(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, valley.Mirrors, 2)
 
-	p, _, ok := valley.ReflectsVertical(valley.Mirrors[0], -1)
+	p, _, _, ok := valley.ReflectsVertical(valley.Mirrors[0], -1)
 	assert.True(t, ok)
 	assert.Equal(t, 6, p)
 	assert.Equal(t, 5, valley.Score(valley.Mirrors[0]))
 
-	p, _, ok = valley.ReflectsHorizontal(valley.Mirrors[1], -1)
+	p, _, _, ok = valley.ReflectsHorizontal(valley.Mirrors[1], -1)
 	assert.True(t, ok)
 	assert.Equal(t, 5, p)
 	assert.Equal(t, 400, valley.Score(valley.Mirrors[1]))
@@ -45,15 +45,16 @@ func Test_Part2(t *testing.T) {
 	valley, err := NewMirrorValley("input")
 	require.NoError(t, err)
 	score := valley.ScoreSmudgedSum()
-	assert.Greater(t, 21356, score) // first guess.
+	assert.Greater(t, score, 21356) // first guess.
 	t.Logf("Sum is %d", score)
 }
 
 func Test_Debug(t *testing.T) {
-	valley, err := NewMirrorValley("sample")
+	valley, err := NewMirrorValley("input")
 	require.NoError(t, err)
-	assert.Len(t, valley.Mirrors, 2)
+	mirror := valley.Mirrors[len(valley.Mirrors)-3]
 
-	assert.Equal(t, 100, valley.ScoreSmudged(valley.Mirrors[1]))
-
+	mirror.PrintNumbered()
+	//t.Logf("Original Score: %d", valley.Score(mirror))
+	t.Logf("Smudged Score: %d", valley.ScoreSmudged(mirror))
 }
