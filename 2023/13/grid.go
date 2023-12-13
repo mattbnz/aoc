@@ -107,6 +107,10 @@ func (g Grid) C(p Pos) Cell {
 	return g.c[p]
 }
 
+func (g Grid) SetC(p Pos, v Cell) {
+	g.c[p] = v
+}
+
 func (g Grid) Next(p Pos, dir CardinalDirection) (np Pos, c Cell, found bool) {
 	switch dir {
 	case NORTH:
@@ -135,6 +139,7 @@ func (g Grid) Copy() Grid {
 	ng := Grid{
 		maxrow: g.maxrow,
 		maxcol: g.maxcol,
+		c:      map[Pos]Cell{},
 	}
 	for p, c := range g.c {
 		ng.c[p] = c
