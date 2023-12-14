@@ -12,7 +12,7 @@ func Test_Sample(t *testing.T) {
 	require.NoError(t, err)
 	expected, err := NewDish("sample-tilted")
 	require.NoError(t, err)
-	dish.Tilt()
+	dish.Tilt(NORTH)
 	assert.True(t, expected.Equal(dish.Grid))
 
 	assert.Equal(t, 136, dish.Load())
@@ -21,7 +21,43 @@ func Test_Sample(t *testing.T) {
 func Test_Part1(t *testing.T) {
 	dish, err := NewDish("input")
 	require.NoError(t, err)
-	dish.Tilt()
+	dish.Tilt(NORTH)
 
-	t.Logf("Total Load: %d", dish.Load())
+	load := dish.Load()
+	assert.Equal(t, 108840, load)
+	t.Logf("Total Load: %d", load)
+}
+
+func Test_Cycle1(t *testing.T) {
+	dish, err := NewDish("sample")
+	require.NoError(t, err)
+	expected, err := NewDish("sample-cycle1")
+	require.NoError(t, err)
+
+	dish.Cycle()
+	if !assert.True(t, expected.Equal(dish.Grid)) {
+		t.Log("Got")
+		dish.PrintNumbered()
+		t.Log("Expected")
+		expected.PrintNumbered()
+	}
+}
+func Test_Cycle2(t *testing.T) {
+	dish, err := NewDish("sample")
+	require.NoError(t, err)
+	expected, err := NewDish("sample-cycle2")
+	require.NoError(t, err)
+	dish.Cycle()
+	dish.Cycle()
+	assert.True(t, expected.Equal(dish.Grid))
+}
+func Test_Cycle3(t *testing.T) {
+	dish, err := NewDish("sample")
+	require.NoError(t, err)
+	expected, err := NewDish("sample-cycle3")
+	require.NoError(t, err)
+	dish.Cycle()
+	dish.Cycle()
+	dish.Cycle()
+	assert.True(t, expected.Equal(dish.Grid))
 }
