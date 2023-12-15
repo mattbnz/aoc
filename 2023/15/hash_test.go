@@ -36,3 +36,17 @@ func Test_Part1(t *testing.T) {
 	assert.Greater(t, hash, 93549)
 	t.Logf("Instruction Hash: %d", hash)
 }
+
+func Test_Sample_Part2(t *testing.T) {
+	manual, err := NewManual("sample")
+	require.NoError(t, err)
+
+	assert.Equal(t, 145, manual.Focus())
+}
+func Test_Part2(t *testing.T) {
+	manual, err := NewManual("input")
+	require.NoError(t, err)
+
+	power := manual.Focus()
+	t.Logf("Focusing Power: %d", power)
+}
