@@ -135,17 +135,54 @@ func (g *MirrorGrid) Beam(id int, depth int, in Pos, heading CardinalDirection) 
 	if wentAnywhere {
 		length += inc
 	}
-	glog.V(1).Infof("Beam % 2d (% 2d) %s => %s%s => %s returns %d", id, depth, heading, in, sym, next, length)
+	glog.V(2).Infof("Beam % 2d (% 2d) %s => %s%s => %s returns %d", id, depth, heading, in, sym, next, length)
 	c.Cache[cacheKey] = length
 	return length
 }
 
-func (g *MirrorGrid) Energized() (sum int) {
-	g.Each(func(_ Pos, c Cell) bool {
-		if len(c.(*MirrorCell).Cache) > 0 {
-			sum++
+// Returns a copy of this grid at the current minute (doesn't preserve past minutes)
+func (g *MirrorGrid) Copy() Grid {
+	ng := Grid{
+		maxrow: g.maxrow,
+		maxcol: g.maxcol,
+		c:      map[Pos]Cell{},
+	}
+	for p, c := range g.c {
+		ng.c[p] = (&MirrorCell{}).New(c.(*MirrorCell).Symbol, p)
+	}
+	return ng
+}
+
+func (g *MirrorGrid) Best() (best int) {
+	// North and South
+	for c := 1; c <= g.maxcol; c++ {
+		sG := MirrorGrid{Grid: g.Copy()}
+		n := sG.Beam(1, 1, Pos{1, c}, SOUTH)
+		if n > best {
+			glog.V(1).Infof("South from %d gives %d as new best", c, n)
+			best = n
 		}
-		return true
-	})
+		nG := MirrorGrid{Grid: g.Copy()}
+		n = nG.Beam(1, 1, Pos{g.maxrow, c}, NORTH)
+		if n > best {
+			glog.V(1).Infof("North from %d gives %d as new best", c, n)
+			best = n
+		}
+	}
+	// East and West
+	for r := 1; r <= g.maxrow; r++ {
+		eG := MirrorGrid{Grid: g.Copy()}
+		n := eG.Beam(1, 1, Pos{r, 1}, EAST)
+		if n > best {
+			glog.V(1).Infof("East from %d gives %d as new best", r, n)
+			best = n
+		}
+		wG := MirrorGrid{Grid: g.Copy()}
+		n = wG.Beam(1, 1, Pos{r, g.maxcol}, WEST)
+		if n > best {
+			glog.V(1).Infof("West from %d gives %d as new best", r, n)
+			best = n
+		}
+	}
 	return
 }
