@@ -11,15 +11,14 @@ func Test_Sample(t *testing.T) {
 	grid, err := NewMirrorGrid("sample")
 	require.NoError(t, err)
 	grid.PrintNumbered()
-	grid.StartBeam(Pos{1, 1}, EAST)
-	grid.Wait()
-	assert.Equal(t, 46, grid.Energized())
+	energized := grid.Beam(1, 1, Pos{1, 1}, EAST)
+	assert.Equal(t, 46, energized)
 }
 
 func Test_Part1(t *testing.T) {
 	grid, err := NewMirrorGrid("input")
 	require.NoError(t, err)
-	grid.StartBeam(Pos{1, 1}, EAST)
-	grid.Wait()
-	t.Logf("Enegerized Tiles: %d", grid.Energized())
+	energized := grid.Beam(1, 1, Pos{1, 1}, EAST)
+	assert.Equal(t, 6921, energized)
+	t.Logf("Enegerized Tiles: %d", energized)
 }

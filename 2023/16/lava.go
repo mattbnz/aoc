@@ -2,7 +2,6 @@ package day16
 
 import (
 	"os"
-	"sync"
 
 	"github.com/golang/glog"
 )
@@ -10,22 +9,80 @@ import (
 type MirrorCell struct {
 	BaseCell
 
-	EnergizedFrom map[CardinalDirection]bool
-	m             sync.Mutex // protects EnergizedFrom
+	Cache  map[CardinalDirection]int
+	onPath map[CardinalDirection]bool
 }
 
 func (c *MirrorCell) New(s string, p Pos) Cell {
 	return &MirrorCell{
-		BaseCell:      BaseCell{id: p, Symbol: s},
-		EnergizedFrom: map[CardinalDirection]bool{},
+		BaseCell: BaseCell{id: p, Symbol: s},
+		Cache:    map[CardinalDirection]int{},
+		onPath:   map[CardinalDirection]bool{},
 	}
+}
+
+func (c *MirrorCell) Beam(from CardinalDirection) (next []CardinalDirection, cacheKey CardinalDirection) {
+	cacheKey = from
+	var to CardinalDirection
+	if c.Symbol == "." {
+		to = from
+	} else if c.Symbol == "\\" {
+		switch from {
+		case NORTH:
+			to = WEST
+		case SOUTH:
+			to = EAST
+		case EAST:
+			to = SOUTH
+		case WEST:
+			to = NORTH
+		}
+	} else if c.Symbol == "/" {
+		switch from {
+		case NORTH:
+			to = EAST
+		case SOUTH:
+			to = WEST
+		case EAST:
+			to = NORTH
+		case WEST:
+			to = SOUTH
+		}
+	} else if c.Symbol == "|" {
+		switch from {
+		case EAST:
+			to = NORTH
+			next = append(next, SOUTH)
+			cacheKey = EAST
+		case WEST:
+			to = NORTH
+			next = append(next, SOUTH)
+			cacheKey = EAST
+		default:
+			to = from
+		}
+	} else if c.Symbol == "-" {
+		switch from {
+		case NORTH:
+			to = WEST
+			next = append(next, EAST)
+			cacheKey = NORTH
+		case SOUTH:
+			to = WEST
+			next = append(next, EAST)
+			cacheKey = NORTH
+		default:
+			to = from
+		}
+	}
+	next = append(next, to)
+	return
 }
 
 type MirrorGrid struct {
 	Grid
 
 	beamCount int
-	wg        sync.WaitGroup
 }
 
 func NewMirrorGrid(filename string) (m MirrorGrid, err error) {
@@ -39,103 +96,53 @@ func NewMirrorGrid(filename string) (m MirrorGrid, err error) {
 	return
 }
 
-func (g *MirrorGrid) StartBeam(in Pos, heading CardinalDirection) {
-	var id = g.beamCount
-	g.beamCount++
-	g.wg.Add(1)
-	glog.V(1).Infof("Starting beam % 2d from %s going %s", id, in, heading)
-	go func() {
-		for {
-			glog.V(1).Infof("Beam % 2d at %s heading %s", id, in, heading)
-			next, going, cont := g.doCell(in, heading)
-			if !cont {
-				glog.V(1).Infof("Beam % 2d: ended at %s going %s ", id, next, going)
-				break
-			}
-			in = next
-			heading = going
-		}
-		g.wg.Done()
-	}()
-}
-
-func (g *MirrorGrid) Wait() {
-	g.wg.Wait()
-}
-
-func (g *MirrorGrid) doCell(in Pos, heading CardinalDirection) (next Pos, going CardinalDirection, cont bool) {
+func (g *MirrorGrid) Beam(id int, depth int, in Pos, heading CardinalDirection) int {
 	c := g.Grid.C(in).(*MirrorCell)
-	c.m.Lock()
-	defer c.m.Unlock()
+	next, cacheKey := c.Beam(heading)
 
-	if c.EnergizedFrom[heading] {
-		cont = false
-		return
+	if length, found := c.Cache[cacheKey]; found {
+		if depth == 0 {
+			return length
+		}
+		return 0
 	}
-	c.EnergizedFrom[heading] = true
 
-	var newBeam CardinalDirection
+	inc := 1
+	sym := "+"
+	if len(c.Cache) > 0 || len(c.onPath) > 0 {
+		inc = 0 // node already visited by another direction, don't count again.
+		sym = " "
+	}
+	glog.V(2).Infof("Beam % 2d (% 2d) %s => %s will go %s", id, depth, heading, in, next)
 
-	if c.Symbol == "." {
-		going = heading
-	} else if c.Symbol == "\\" {
-		switch heading {
-		case NORTH:
-			going = WEST
-		case SOUTH:
-			going = EAST
-		case EAST:
-			going = SOUTH
-		case WEST:
-			going = NORTH
+	length := 0
+	wentAnywhere := false
+	for _, nHeading := range next {
+		if c.onPath[nHeading] {
+			glog.V(2).Infof("Beam % 2d can't go %s from %s (already on that path!)", id, nHeading, in)
+			continue
 		}
-	} else if c.Symbol == "/" {
-		switch heading {
-		case NORTH:
-			going = EAST
-		case SOUTH:
-			going = WEST
-		case EAST:
-			going = NORTH
-		case WEST:
-			going = SOUTH
+		wentAnywhere = true
+		newNext, _, found := g.Next(c.id, nHeading)
+		if !found {
+			glog.V(2).Infof("Beam % 2d can't go %s from %s", id, nHeading, in)
+			continue
 		}
-	} else if c.Symbol == "|" {
-		switch heading {
-		case EAST:
-			going = NORTH
-			newBeam = SOUTH
-		case WEST:
-			going = NORTH
-			newBeam = SOUTH
-		default:
-			going = heading
-		}
-	} else if c.Symbol == "-" {
-		switch heading {
-		case NORTH:
-			going = WEST
-			newBeam = EAST
-		case SOUTH:
-			going = WEST
-			newBeam = EAST
-		default:
-			going = heading
-		}
+		c.onPath[nHeading] = true
+		length += g.Beam(id, depth+1, newNext, nHeading)
+		delete(c.onPath, nHeading)
 	}
-	if newBeam != NO_DIRECTION {
-		newNext, _, found := g.Next(c.id, newBeam)
-		if found {
-			g.StartBeam(newNext, newBeam)
-		}
+	if wentAnywhere {
+		length += inc
 	}
-	next, _, cont = g.Next(c.id, going)
-	return
+	glog.V(1).Infof("Beam % 2d (% 2d) %s => %s%s => %s returns %d", id, depth, heading, in, sym, next, length)
+	c.Cache[cacheKey] = length
+	return length
 }
 
 func (g *MirrorGrid) Energized() (sum int) {
 	g.Each(func(_ Pos, c Cell) bool {
-		if len(c.(*MirrorCell).EnergizedFrom) > 0 {
+		if len(c.(*MirrorCell).Cache) > 0 {
 			sum++
 		}
 		return true
