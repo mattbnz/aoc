@@ -106,9 +106,6 @@ func (g FlexGrid) String() string {
 
 func (g FlexGrid) C(p Pos) Cell {
 	c := g.c[p]
-	if c == nil {
-		c = BaseCell{id: p, Symbol: "."}
-	}
 	return c
 }
 
@@ -142,7 +139,7 @@ func (g FlexGrid) Next(p Pos, dir CardinalDirection) (np Pos, c Cell, found bool
 		found = false
 		return
 	}
-	if np.row < 1 || np.col < 1 || np.row > g.maxrow || np.col > g.maxcol {
+	if np.row < g.minrow || np.col < g.mincol || np.row > g.maxrow || np.col > g.maxcol {
 		found = false
 		return
 	}
@@ -169,7 +166,12 @@ func (g FlexGrid) Copy() FlexGrid {
 func (g FlexGrid) Print() {
 	for row := g.minrow; row <= g.maxrow; row++ {
 		for col := g.mincol; col <= g.maxcol; col++ {
-			fmt.Print(g.C(Pos{row, col}))
+			c := g.C(Pos{row, col})
+			if c == nil {
+				fmt.Print(".")
+			} else {
+				fmt.Print(c)
+			}
 		}
 		fmt.Println()
 	}
@@ -184,8 +186,13 @@ func (g FlexGrid) PrintNumbered() {
 	fmt.Println()
 	for row := g.minrow; row <= g.maxrow; row++ {
 		fmt.Printf("%d", Abs(row)%10)
-		for col := 1; col <= g.maxcol; col++ {
-			fmt.Print(g.C(Pos{row, col}))
+		for col := g.mincol; col <= g.maxcol; col++ {
+			c := g.C(Pos{row, col})
+			if c == nil {
+				fmt.Print(".")
+			} else {
+				fmt.Print(c)
+			}
 		}
 		fmt.Println()
 	}
@@ -194,7 +201,7 @@ func (g FlexGrid) PrintNumbered() {
 
 func (g FlexGrid) Each(cb func(Pos, Cell) bool) {
 	for row := g.minrow; row <= g.maxrow; row++ {
-		for col := g.minrow; col <= g.maxcol; col++ {
+		for col := g.mincol; col <= g.maxcol; col++ {
 			p := Pos{row, col}
 			if !cb(p, g.C(p)) {
 				return

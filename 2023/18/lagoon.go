@@ -10,14 +10,21 @@ import (
 	"github.com/golang/glog"
 )
 
-const HOLE = "#"
-const GROUND = "."
+const TRENCH = "#"
+const GROUND = "*"
+const DEFAULT = "."
 
 var digDir = map[string]CardinalDirection{
 	"U": NORTH,
 	"R": EAST,
 	"D": SOUTH,
 	"L": WEST,
+}
+
+type LagoonCell struct {
+	BaseCell
+
+	visited bool
 }
 
 type Lagoon struct {
@@ -50,7 +57,7 @@ func (l *Lagoon) Trench(dir CardinalDirection, length int) {
 
 // Digs a hole at l.Digger
 func (l *Lagoon) Dig() {
-	l.SetC(l.Digger, BaseCell{id: l.Digger, Symbol: HOLE})
+	l.SetC(l.Digger, &LagoonCell{BaseCell: BaseCell{id: l.Digger, Symbol: TRENCH}})
 }
 
 func NewLagoon(filename string) (l Lagoon, err error) {
@@ -99,7 +106,7 @@ func (c *Lagoon) TrenchLength() (rv int) {
 		if c == nil {
 			return true
 		}
-		if c.(BaseCell).Symbol == HOLE {
+		if c.(*LagoonCell).Symbol == TRENCH {
 			rv++
 		}
 		return true
@@ -107,77 +114,73 @@ func (c *Lagoon) TrenchLength() (rv int) {
 	return
 }
 
-func (c *Lagoon) RowVolume(row int) (rv int) {
-	rowStr := ""
+func (c *Lagoon) C(p Pos) *LagoonCell {
+	rv := c.FlexGrid.C(p)
+	if rv == nil {
+		lc := &LagoonCell{BaseCell: BaseCell{id: p, Symbol: "."}}
+		c.FlexGrid.c[p] = lc
+		return lc
+	}
+	return rv.(*LagoonCell)
+}
+
+func (c *Lagoon) Visit(p Pos) {
+	cell := c.C(p)
+	if cell.Symbol == TRENCH {
+		return // nothing to do for trench cells
+	}
+	if cell.visited {
+		return
+	}
+	cell.visited = true
+	cell.Symbol = GROUND
+	for _, d := range CardinalDirections {
+		np, _, found := c.FlexGrid.Next(p, d)
+		if !found {
+			continue
+		}
+		nc := c.C(np)
+		if nc.Symbol == TRENCH {
+			continue
+		}
+		c.Visit(np)
+	}
+}
+
+func (c *Lagoon) VisitAll() {
+	// Visit (recursively from every outside cell inwards)
 	for col := c.mincol; col <= c.maxcol; col++ {
-		p := Pos{row, col}
-		cell := c.C(p).(BaseCell)
-		rowStr += cell.Symbol
+		c.Visit(Pos{c.minrow, col})
+		c.Visit(Pos{c.maxrow, col})
 	}
-	idx := 0
-	trenchStart := -1
-	maybeGroundStart := -1
-	for idx <= len(rowStr) {
-		// trenchStart not set == not in trench OR hole, look for a trench.
-		if trenchStart == -1 {
-			trenchStart = strings.Index(rowStr[idx:], HOLE)
-			if trenchStart == -1 {
-				break // no more trenches
-			}
-			trenchStart += idx
-			idx = trenchStart + 1
-			continue
-		}
-		// in a trench coming out of a hole
-		if maybeGroundStart != -1 {
-			ground := strings.Index(rowStr[idx:], GROUND)
-			if ground == -1 {
-				ground = len(rowStr)
-			} else {
-				ground += idx
-			}
-			glog.V(2).Infof("row % 4d: Found trench (with hole) from %d - %d: %d", row, trenchStart, ground, ground-trenchStart)
-			rv += ground - trenchStart
-			trenchStart = -1
-			maybeGroundStart = -1
-			idx = ground
-			continue
-		}
-		// in a trench, maybe going into a hole.
-		maybeHoleStart := strings.Index(rowStr[idx:], GROUND)
-		if maybeHoleStart == -1 {
-			// trench extends to end of row
-			rv += len(rowStr) - trenchStart
-			glog.V(2).Infof("row % 4d: Found trench (no hole) from %d - END: %d", row, trenchStart, len(rowStr)-trenchStart)
-			trenchStart = -1
-			break
-		}
-		maybeHoleStart += idx + 1
-		// if we can find another trench ahead, then we're in a hole, otherwise the trench ended on the previous tile.
-		holeEnd := strings.Index(rowStr[maybeHoleStart:], HOLE)
-		if holeEnd == -1 {
-			// trench ended on the previous tile
-			rv += maybeHoleStart - 1 - trenchStart
-			glog.V(2).Infof("row % 4d: Found trench (R) from %d - %d: %d", row, trenchStart, maybeHoleStart-1, maybeHoleStart-1-trenchStart)
-			trenchStart = -1
-			break
-		}
-		holeEnd += maybeHoleStart
-		maybeGroundStart = holeEnd + 1
-		idx = maybeGroundStart
+	for row := c.minrow; row <= c.maxrow; row++ {
+		c.Visit(Pos{row, c.mincol})
+		c.Visit(Pos{row, c.maxcol})
 	}
-	if trenchStart != -1 {
-		// Ended in a trench
-		rv += len(rowStr) - trenchStart
-		glog.V(2).Infof("row % 4d: Ended in trench from %d: %d", row, trenchStart, len(rowStr)-trenchStart)
+}
+
+func (c *Lagoon) RowVolume(row int) (rv int) {
+	c.VisitAll()
+	s := ""
+	for col := c.mincol; col <= c.maxcol; col++ {
+		cell := c.C(Pos{row, col})
+		if cell.Symbol == TRENCH || cell.Symbol == DEFAULT {
+			rv++
+		}
+		s += cell.Symbol
 	}
-	glog.V(1).Infof("row % 4d: %s %d", row, rowStr, rv)
+	glog.V(1).Infof("Row % 4d: %s %d", row, s, rv)
 	return
 }
 
 func (c *Lagoon) Volume() (rv int) {
-	for row := c.minrow; row <= c.maxrow; row++ {
-		rv += c.RowVolume(row)
-	}
+	c.VisitAll()
+	c.Each(func(p Pos, _ Cell) bool {
+		cell := c.C(p)
+		if cell.Symbol == TRENCH || cell.Symbol == DEFAULT {
+			rv++
+		}
+		return true
+	})
 	return
 }
