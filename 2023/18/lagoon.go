@@ -108,33 +108,70 @@ func (c *Lagoon) TrenchLength() (rv int) {
 }
 
 func (c *Lagoon) RowVolume(row int) (rv int) {
-	inTrench := false
-	seenDot := true
-	rowDbg := ""
+	rowStr := ""
 	for col := c.mincol; col <= c.maxcol; col++ {
 		p := Pos{row, col}
 		cell := c.C(p).(BaseCell)
-		if cell.Symbol != HOLE {
-			if inTrench {
-				rv++
-			}
-			seenDot = true
-		} else {
-			if inTrench {
-				if seenDot {
-					inTrench = false
-				}
-			} else {
-				if seenDot {
-					inTrench = true
-				}
-			}
-			seenDot = false
-			rv++
-		}
-		rowDbg += cell.Symbol
+		rowStr += cell.Symbol
 	}
-	glog.V(1).Infof("row % 4d: %s %d", row, rowDbg, rv)
+	idx := 0
+	trenchStart := -1
+	maybeGroundStart := -1
+	for idx <= len(rowStr) {
+		// trenchStart not set == not in trench OR hole, look for a trench.
+		if trenchStart == -1 {
+			trenchStart = strings.Index(rowStr[idx:], HOLE)
+			if trenchStart == -1 {
+				break // no more trenches
+			}
+			trenchStart += idx
+			idx = trenchStart + 1
+			continue
+		}
+		// in a trench coming out of a hole
+		if maybeGroundStart != -1 {
+			ground := strings.Index(rowStr[idx:], GROUND)
+			if ground == -1 {
+				ground = len(rowStr)
+			} else {
+				ground += idx
+			}
+			glog.V(2).Infof("row % 4d: Found trench (with hole) from %d - %d: %d", row, trenchStart, ground, ground-trenchStart)
+			rv += ground - trenchStart
+			trenchStart = -1
+			maybeGroundStart = -1
+			idx = ground
+			continue
+		}
+		// in a trench, maybe going into a hole.
+		maybeHoleStart := strings.Index(rowStr[idx:], GROUND)
+		if maybeHoleStart == -1 {
+			// trench extends to end of row
+			rv += len(rowStr) - trenchStart
+			glog.V(2).Infof("row % 4d: Found trench (no hole) from %d - END: %d", row, trenchStart, len(rowStr)-trenchStart)
+			trenchStart = -1
+			break
+		}
+		maybeHoleStart += idx + 1
+		// if we can find another trench ahead, then we're in a hole, otherwise the trench ended on the previous tile.
+		holeEnd := strings.Index(rowStr[maybeHoleStart:], HOLE)
+		if holeEnd == -1 {
+			// trench ended on the previous tile
+			rv += maybeHoleStart - 1 - trenchStart
+			glog.V(2).Infof("row % 4d: Found trench (R) from %d - %d: %d", row, trenchStart, maybeHoleStart-1, maybeHoleStart-1-trenchStart)
+			trenchStart = -1
+			break
+		}
+		holeEnd += maybeHoleStart
+		maybeGroundStart = holeEnd + 1
+		idx = maybeGroundStart
+	}
+	if trenchStart != -1 {
+		// Ended in a trench
+		rv += len(rowStr) - trenchStart
+		glog.V(2).Infof("row % 4d: Ended in trench from %d: %d", row, trenchStart, len(rowStr)-trenchStart)
+	}
+	glog.V(1).Infof("row % 4d: %s %d", row, rowStr, rv)
 	return
 }
 

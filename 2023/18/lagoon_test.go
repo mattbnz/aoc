@@ -48,7 +48,8 @@ func Test_Part1(t *testing.T) {
 	require.NoError(t, err)
 
 	volume := lagoon.Volume()
-	assert.Less(t, volume, 100724) // First Guess
-	assert.Less(t, volume, 93240)  // First Guess
+	assert.Less(t, volume, 100724)   // First Guess
+	assert.Less(t, volume, 93240)    // Second Guess
+	assert.Greater(t, volume, 90818) // Third Guess
 	t.Logf("Lagon Volume: %d", volume)
 }
