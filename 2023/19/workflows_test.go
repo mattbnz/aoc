@@ -33,6 +33,13 @@ func Test_Sample(t *testing.T) {
 	assert.True(t, crn.Rules[1].IsDefault())
 
 	heap.SortParts()
+	for n, w := range heap.Workflows {
+		e, found := map[string]int{"A": 3, "R": 2}[n]
+		if !found {
+			e = 0
+		}
+		assert.Len(t, w.Queue, e, "Queue %s had unexpected length", n)
+	}
 
 	accepted := heap.Sum("A")
 	assert.Equal(t, 19114, accepted)

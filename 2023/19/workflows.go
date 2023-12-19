@@ -2,6 +2,7 @@ package day19
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -12,6 +13,11 @@ import (
 )
 
 type Part map[string]int
+
+func (p Part) String() string {
+	jb, _ := json.Marshal(p)
+	return string(jb)
+}
 
 func NewPart(s string) (rv Part) {
 	rv = make(Part)
@@ -79,6 +85,10 @@ type Workflow struct {
 	Queue []*Part
 }
 
+func (w *Workflow) Append(p *Part) {
+	w.Queue = append(w.Queue, p)
+}
+
 func NewWorkflow(s string) (rv Workflow) {
 	b := strings.Index(s, "{")
 	if b == -1 {
@@ -131,18 +141,68 @@ func NewHeap(filename string) (h Heap, err error) {
 			h.Workflows[w.Name] = &w
 		} else {
 			p := NewPart(s.Text())
-			in.Queue = append(in.Queue, &p)
+			in.Append(&p)
 		}
 	}
 	glog.V(1).Infof("Loaded %d workflows", len(h.Workflows))
 	glog.V(1).Infof("Loaded %d parts", len(in.Queue))
+	h.Workflows["A"] = &Workflow{Name: "A"}
+	h.Workflows["R"] = &Workflow{Name: "R"}
 	return
 }
 
 func (h *Heap) SortParts() {
-
+	i := 0
+	for {
+		processed := 0
+		for _, w := range h.Workflows {
+			if len(w.Queue) == 0 || w.Name == "A" || w.Name == "R" {
+				continue // don't process empty, or final queues.
+			}
+			//q := append([]*Part{}, w.Queue...)
+			q := w.Queue
+			w.Queue = []*Part{}
+			for _, p := range q {
+				dest := ""
+				for _, r := range w.Rules {
+					if r.IsDefault() {
+						dest = r.dest
+						break
+					}
+					match := false
+					switch r.op {
+					case ">":
+						match = (*p)[r.attr] > r.val
+					case "<":
+						match = (*p)[r.attr] < r.val
+					default:
+						glog.Fatalf("bad rule (%s) in %s, cannot match %s", r, w, p)
+					}
+					if match {
+						dest = r.dest
+						break
+					}
+				}
+				if dest == "" {
+					glog.Fatalf("did not find match (even default!) for %s in %s", p, w)
+				}
+				h.Workflows[dest].Append(p)
+				processed++
+			}
+		}
+		glog.V(2).Infof("Iteration % 4d: Processed %d parts", i, processed)
+		if processed == 0 {
+			break
+		}
+		i++
+	}
 }
 
-func (h *Heap) Sum(workflow string) int {
-	return 0
+func (h *Heap) Sum(workflow string) (rv int) {
+	for _, p := range h.Workflows[workflow].Queue {
+		for _, v := range *p {
+			rv += v
+		}
+	}
+	return
 }
